@@ -24,9 +24,10 @@ const {
 } = Astro.props;
 
 const id = `ap-${file.replace(/[^a-zA-Z0-9]/g, '-')}`;
-const src = `${import.meta.env.BASE_URL}casts/${file}`;
-const cssHref = `${import.meta.env.BASE_URL}vendor/asciinema-player/asciinema-player.css`;
-const jsHref = `${import.meta.env.BASE_URL}vendor/asciinema-player/asciinema-player.min.js`;
+const baseUrl = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
+const src = `${baseUrl}casts/${file}`;
+const cssHref = `${baseUrl}vendor/asciinema-player/asciinema-player.css`;
+const jsHref = `${baseUrl}vendor/asciinema-player/asciinema-player.min.js`;
 ---
 
 <link rel="stylesheet" type="text/css" href={cssHref} />
