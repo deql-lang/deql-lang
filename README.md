@@ -1,3 +1,7 @@
+<p align="left">
+  <img src="https://raw.githubusercontent.com/deql-lang/deql-lang/main/site/src/assets/deql-logo.svg" alt="DeQL Logo" width="200" />
+</p>
+
 # deql-lang
 
 DeQL (Decision Query Language) is a declarative language for defining, executing, and inspecting business decisions over event‑sourced state, enabling progressively evolving and scalable CQRS‑ES systems.
