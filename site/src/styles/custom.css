@@ -47,3 +47,71 @@ pre.mermaid,
 }
 
 /* Asciinema player — remove CSS font override, handled by API */
+
+/* With DeQL vs Without DeQL comparison grid */
+.comparison-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 1.5rem 0 2.5rem;
+}
+
+.comparison-col {
+  padding: 1.25rem 1.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--sl-color-gray-5);
+}
+
+.comparison-col ul {
+  padding-left: 1.2rem;
+  margin: 0.5rem 0 0;
+}
+
+.comparison-col li {
+  margin-bottom: 0.4rem;
+  line-height: 1.5;
+}
+
+.comparison-without {
+  background: rgba(220, 60, 60, 0.06);
+  border-color: rgba(220, 60, 60, 0.2);
+}
+
+.comparison-with {
+  background: rgba(60, 180, 100, 0.06);
+  border-color: rgba(60, 180, 100, 0.2);
+}
+
+:root[data-theme="dark"] .comparison-without {
+  background: rgba(220, 60, 60, 0.08);
+  border-color: rgba(220, 60, 60, 0.25);
+}
+
+:root[data-theme="dark"] .comparison-with {
+  background: rgba(60, 180, 100, 0.08);
+  border-color: rgba(60, 180, 100, 0.25);
+}
+
+@media (max-width: 600px) {
+  .comparison-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Asciinema player — render controls below the terminal viewport */
+.ap-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.ap-wrapper .ap-player {
+  position: relative;
+}
+
+.ap-wrapper .ap-control-bar {
+  position: relative !important;
+  bottom: auto !important;
+  opacity: 1 !important;
+  background: rgba(0, 0, 0, 0.85);
+  border-radius: 0 0 0.5rem 0.5rem;
+}
