@@ -5,10 +5,12 @@ import starlightClientMermaid from '@pasqal-io/starlight-client-mermaid';
 import deqlGrammar from './deql-grammar.mjs';
 import deqlTheme from './deql-theme.mjs';
 
+const base = '/deql-lang/';
+
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://deql-lang.github.io',
-	base: '/deql-lang/',
+	base,
 	markdown: {
 		shikiConfig: {
 			langs: [deqlGrammar],
@@ -27,7 +29,8 @@ export default defineConfig({
 			plugins: [starlightClientMermaid()],
 			customCss: ['./src/styles/custom.css'],
 			head: [
-				{ tag: 'script', attrs: { src: '/docs-nav.js' } },
+				{ tag: 'meta', attrs: { name: 'base-path', content: base } },
+				{ tag: 'script', attrs: { src: `${base}docs-nav.js` } },
 				{ tag: 'link', attrs: { rel: 'stylesheet', href: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css' } },
 			],
 			expressiveCode: {
