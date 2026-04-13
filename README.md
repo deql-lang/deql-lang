@@ -101,31 +101,31 @@ All concepts are registered in the **DeReg** (Decision Registry). Use `DESCRIBE`
 
 ## Documentation
 
-Full language specification hosted at: **[deql-lang.github.io](https://deql-lang.github.io)**
+Full language specification hosted at: **[deql-lang.github.io/deql-lang/](https://deql-lang.github.io/deql-lang/)**
 
 **Getting Started**
 
-*   [Overview](https://deql-lang.github.io/overview/) — What DeQL is, core philosophy, how it works
-*   [Two-Phase Model](https://deql-lang.github.io/two-phase-model/) — Definitions → Decision Assembly → EXECUTE
-*   [Progressive Design](https://deql-lang.github.io/progressive-design/) — Start small, grow safely
+*   [Overview](https://deql-lang.github.io/deql-lang/overview/) — What DeQL is, core philosophy, how it works
+*   [Two-Phase Model](https://deql-lang.github.io/deql-lang/two-phase-model/) — Definitions → Decision Assembly → EXECUTE
+*   [Progressive Design](https://deql-lang.github.io/deql-lang/progressive-design/) — Start small, grow safely
 
 **Language Reference**
 
-*   [AGGREGATE](https://deql-lang.github.io/concepts/aggregate/) — State models, `$Agg` queries, cross-aggregate decisions
-*   [COMMAND](https://deql-lang.github.io/concepts/command/) — External intent, field types, `EXECUTE` syntax
-*   [EVENT](https://deql-lang.github.io/concepts/event/) — Immutable facts, event metadata, `$Events` queries
-*   [DECISION](https://deql-lang.github.io/concepts/decision/) — STATE AS, EMIT AS, guards, multi-state queries
-*   [PROJECTION](https://deql-lang.github.io/concepts/projection/) — Read models, aggregation, replay with offset and guards
-*   [TEMPLATE](https://deql-lang.github.io/concepts/template/) — Reusable patterns: RegistryEntity, wallet_aggregate
-*   [EVENTSTORE](https://deql-lang.github.io/concepts/eventstore/) — Durable storage, partitioning, WAL, compaction
-*   [DESCRIBE](https://deql-lang.github.io/concepts/describe/) — Inspect definitions, VALIDATE DEREG, EXPORT DEREG
-*   [Inspection](https://deql-lang.github.io/inspection/) — INSPECT DECISION, INSPECT PROJECTION, production replay
+*   [AGGREGATE](https://deql-lang.github.io/deql-lang/concepts/aggregate/) — State models, `$Agg` queries, cross-aggregate decisions
+*   [COMMAND](https://deql-lang.github.io/deql-lang/concepts/command/) — External intent, field types, `EXECUTE` syntax
+*   [EVENT](https://deql-lang.github.io/deql-lang/concepts/event/) — Immutable facts, event metadata, `$Events` queries
+*   [DECISION](https://deql-lang.github.io/deql-lang/concepts/decision/) — STATE AS, EMIT AS, guards, multi-state queries
+*   [PROJECTION](https://deql-lang.github.io/deql-lang/concepts/projection/) — Read models, aggregation, replay with offset and guards
+*   [TEMPLATE](https://deql-lang.github.io/deql-lang/concepts/template/) — Reusable patterns: RegistryEntity, wallet_aggregate
+*   [EVENTSTORE](https://deql-lang.github.io/deql-lang/concepts/eventstore/) — Durable storage, partitioning, WAL, compaction
+*   [DESCRIBE](https://deql-lang.github.io/deql-lang/concepts/describe/) — Inspect definitions, VALIDATE DEREG, EXPORT DEREG
+*   [Inspection](https://deql-lang.github.io/deql-lang/inspection/) — INSPECT DECISION, INSPECT PROJECTION, production replay
 
 **Examples**
 
-*   [Inventory System](https://deql-lang.github.io/examples/inventory-system/) — Warehouse management with stock movements
-*   [Registry System](https://deql-lang.github.io/examples/registry-system/) — Daksha-RC entity lifecycle
-*   [Telecom Wallet](https://deql-lang.github.io/examples/telecom-wallet/) — Multi-wallet system with balance guards
+*   [Inventory System](https://deql-lang.github.io/deql-lang/examples/inventory-system/) — Warehouse management with stock movements
+*   [Registry System](https://deql-lang.github.io/deql-lang/examples/registry-system/) — Daksha-RC entity lifecycle
+*   [Telecom Wallet](https://deql-lang.github.io/deql-lang/examples/telecom-wallet/) — Multi-wallet system with balance guards
 
 ***
 
