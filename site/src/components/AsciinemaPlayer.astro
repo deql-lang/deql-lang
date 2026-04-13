@@ -1,0 +1,67 @@
+---
+interface Props {
+  file: string;
+  autoPlay?: boolean;
+  theme?: string;
+  fit?: string;
+  idleTimeLimit?: number;
+  speed?: number;
+  loop?: boolean;
+  fontSize?: string;
+  rows?: number;
+}
+
+const {
+  file,
+  autoPlay = true,
+  theme = 'monokai',
+  fit = 'none',
+  idleTimeLimit = 2,
+  speed = 1,
+  loop = false,
+  fontSize = '16px',
+  rows = 12,
+} = Astro.props;
+
+const id = `ap-${file.replace(/[^a-zA-Z0-9]/g, '-')}`;
+const src = `${import.meta.env.BASE_URL}casts/${file}`;
+const cssHref = `${import.meta.env.BASE_URL}vendor/asciinema-player/asciinema-player.css`;
+const jsHref = `${import.meta.env.BASE_URL}vendor/asciinema-player/asciinema-player.min.js`;
+---
+
+<link rel="stylesheet" type="text/css" href={cssHref} />
+<div id={id} style="margin: 1.5rem 0;"></div>
+<script
+  is:inline
+  data-id={id}
+  data-src={src}
+  data-js={jsHref}
+  data-autoplay={String(autoPlay)}
+  data-theme={theme}
+  data-fit={fit}
+  data-idle={String(idleTimeLimit)}
+  data-speed={String(speed)}
+  data-loop={String(loop)}
+  data-fontsize={fontSize}
+  data-rows={String(rows)}
+>
+(function() {
+  var s = document.currentScript;
+  var div = document.getElementById(s.dataset.id);
+  var tag = document.createElement('script');
+  tag.src = s.dataset.js;
+  tag.onload = function() {
+    AsciinemaPlayer.create(s.dataset.src, div, {
+      autoPlay: s.dataset.autoplay === 'true',
+      theme: s.dataset.theme,
+      fit: s.dataset.fit,
+      idleTimeLimit: Number(s.dataset.idle),
+      speed: Number(s.dataset.speed),
+      loop: s.dataset.loop === 'true',
+      terminalFontSize: s.dataset.fontsize,
+      rows: Number(s.dataset.rows),
+    });
+  };
+  document.head.appendChild(tag);
+})();
+</script>

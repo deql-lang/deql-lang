@@ -1,0 +1,238 @@
+-- ============================================================
+-- DeQL Smoke Test — covers all implemented features (Phases 1–7)
+-- Run: deql-cli -f tests/smoke_test.deql
+-- ============================================================
+
+-- ============================================================
+-- 0. SQL passthrough 
+-- ============================================================
+SELECT 1 + 1;
+SELECT 'DeQL smoke test' AS label;
+
+-- ============================================================
+-- 1. CREATE AGGREGATE
+-- Aggregate is a consistency boundary not a data structure.
+-- ============================================================
+CREATE AGGREGATE Employee;
+CREATE AGGREGATE BankAccount;
+
+-- ============================================================
+-- 2. CREATE COMMAND (typed fields)
+-- Command is external intent entering the system
+-- ============================================================
+CREATE COMMAND HireEmployee (employee_id UUID, name STRING, grade STRING);
+CREATE COMMAND PromoteEmployee (employee_id UUID, new_grade STRING);
+CREATE COMMAND OpenAccount (account_id UUID, initial_balance DECIMAL(12,2));
+CREATE COMMAND Deposit (account_id UUID, amount DECIMAL(12,2));
+
+-- ============================================================
+-- 3. CREATE EVENT (typed fields)
+-- Event is an immutable fact
+-- ============================================================
+CREATE EVENT EmployeeHired (name STRING, grade STRING);
+CREATE EVENT EmployeePromoted (new_grade STRING);
+CREATE EVENT AccountOpened (initial_balance DECIMAL(12,2));
+CREATE EVENT Deposited (amount DECIMAL(12,2));
+
+-- ============================================================
+-- 4. CREATE DECISION — basic (no guard)
+-- Decisions are where business logic lives.
+-- ============================================================
+CREATE DECISION Hire
+  FOR Employee
+  ON COMMAND HireEmployee
+  EMIT AS SELECT EVENT EmployeeHired (
+    name := :name,
+    grade := :grade
+  );
+
+CREATE DECISION Promote
+  FOR Employee
+  ON COMMAND PromoteEmployee
+  EMIT AS SELECT EVENT EmployeePromoted (
+    new_grade := :new_grade
+  );
+
+-- ============================================================
+-- 5. CREATE DECISION — with STATE AS + WHERE guard
+-- State can query a single aggregate, join multiple aggregates,
+-- ============================================================
+CREATE DECISION Open
+  FOR BankAccount
+  ON COMMAND OpenAccount
+  EMIT AS SELECT EVENT AccountOpened (
+    initial_balance := :initial_balance
+  );
+
+CREATE DECISION DepositFunds
+  FOR BankAccount
+  ON COMMAND Deposit
+  STATE AS SELECT initial_balance AS balance
+    FROM DeReg."BankAccount$Agg"
+    WHERE aggregate_id = :account_id
+  EMIT AS SELECT EVENT Deposited (
+    amount := :amount
+  )
+  WHERE balance >= :amount;
+
+-- ============================================================
+-- 6. CREATE EVENTSTORE
+-- ============================================================
+CREATE EVENTSTORE local_dev WITH (
+  envelope.event_id_key = 'event_id',
+  durable.type = 'parquet',
+  durable.path = '/tmp/deql/',
+  strict.immutable_events = true
+);
+
+-- ============================================================
+-- 7. EXECUTE — emit events into the event store
+-- ============================================================
+
+-- Hire employees
+EXECUTE HireEmployee(employee_id := 'EMP-001', name := 'Alice', grade := 'L5');
+EXECUTE HireEmployee(employee_id := 'EMP-002', name := 'Bob', grade := 'L4');
+
+-- Promote an employee
+EXECUTE PromoteEmployee(employee_id := 'EMP-001', new_grade := 'L6');
+
+-- Open bank accounts
+EXECUTE OpenAccount(account_id := 'ACC-001', initial_balance := 1000.00);
+EXECUTE OpenAccount(account_id := 'ACC-002', initial_balance := 250.00);
+
+-- Deposit into an account (uses STATE AS + WHERE guard)
+EXECUTE Deposit(account_id := 'ACC-001', amount := 500.00);
+EXECUTE Deposit(account_id := 'ACC-002', amount := 100.00);
+
+-- ============================================================
+-- 8. Query raw events via $Events
+-- ============================================================
+SELECT stream_id, event_type, seq, data
+  FROM DeReg."BankAccount$Events"
+  ORDER BY stream_id, seq;
+
+SELECT stream_id, event_type, seq, data
+  FROM DeReg."Employee$Events"
+  ORDER BY stream_id, seq;
+
+-- ============================================================
+-- 9. Query aggregate state via $Agg
+-- ============================================================
+SELECT * FROM DeReg."BankAccount$Agg";
+SELECT * FROM DeReg."Employee$Agg";
+
+-- Filter by aggregate_id
+SELECT * FROM DeReg."BankAccount$Agg" WHERE aggregate_id = 'ACC-001';
+
+-- Select specific column
+SELECT aggregate_id, initial_balance FROM DeReg."BankAccount$Agg";
+
+-- ============================================================
+-- 10. CREATE PROJECTION + query
+-- ============================================================
+CREATE PROJECTION AccountBalance AS
+  SELECT stream_id AS aggregate_id,
+         LAST(data.initial_balance) AS balance
+  FROM DeReg."BankAccount$Events"
+  GROUP BY stream_id;
+
+SELECT * FROM DeReg."AccountBalance";
+
+CREATE PROJECTION EmployeeRoster AS
+  SELECT stream_id AS employee_id,
+         LAST(data.name) AS name,
+         LAST(data.grade) AS current_grade,
+         LAST(data.new_grade) AS promoted_grade
+  FROM DeReg."Employee$Events"
+  GROUP BY stream_id;
+
+SELECT * FROM DeReg."EmployeeRoster";
+
+-- ============================================================
+-- 11. DESCRIBE — single concepts
+-- ============================================================
+DESCRIBE AGGREGATE BankAccount;
+DESCRIBE COMMAND OpenAccount;
+DESCRIBE EVENT AccountOpened;
+DESCRIBE DECISION Open;
+DESCRIBE PROJECTION AccountBalance;
+DESCRIBE EVENTSTORE local_dev;
+
+-- ============================================================
+-- 12. DESCRIBE — list all
+-- ============================================================
+DESCRIBE AGGREGATES;
+DESCRIBE COMMANDS;
+DESCRIBE EVENTS;
+DESCRIBE DECISIONS;
+DESCRIBE PROJECTIONS;
+DESCRIBE EVENTSTORES;
+
+-- ============================================================
+-- 13. VALIDATE DEREG — cross-reference consistency
+-- ============================================================
+VALIDATE DEREG;
+
+-- ============================================================
+-- 14. EXPORT DEREG — dump as reproducible DeQL
+-- ============================================================
+EXPORT DEREG;
+
+-- ============================================================
+-- 15. INSPECT DECISION — simulation (no side effects)
+-- ============================================================
+
+-- Test data: positional columns (auto-mapped to command fields)
+CREATE TABLE test_hires AS VALUES
+  ('EMP-100', 'Charlie', 'L3'),
+  ('EMP-101', 'Diana', 'L5');
+
+INSPECT DECISION Hire
+  FROM test_hires
+  INTO simulated_hire_events;
+
+SELECT stream_id, event_type, data
+  FROM simulated_hire_events;
+
+-- Test data: bank account opens
+CREATE TABLE test_opens AS VALUES
+  ('ACC-100', 500.00),
+  ('ACC-101', 0.00),
+  ('ACC-102', 1500.00);
+
+INSPECT DECISION Open
+  FROM test_opens
+  INTO simulated_open_events;
+
+SELECT stream_id, event_type, data
+  FROM simulated_open_events;
+
+-- ============================================================
+-- 16. INSPECT PROJECTION — chain simulated events into projection
+-- ============================================================
+INSPECT PROJECTION AccountBalance
+  FROM simulated_open_events
+  INTO simulated_balances;
+
+SELECT * FROM simulated_balances;
+
+-- ============================================================
+-- 17. INSPECT overwrite semantics — re-run overwrites INTO table
+-- ============================================================
+INSPECT DECISION Open
+  FROM test_opens
+  INTO simulated_open_events;
+
+SELECT COUNT(*) AS event_count FROM simulated_open_events;
+
+-- ============================================================
+-- 18. CREATE OR REPLACE — overwrite existing definitions
+-- ============================================================
+CREATE OR REPLACE AGGREGATE BankAccount;
+CREATE OR REPLACE COMMAND OpenAccount (account_id UUID, initial_balance DECIMAL(12,2));
+CREATE OR REPLACE EVENT AccountOpened (initial_balance DECIMAL(12,2));
+
+-- ============================================================
+-- 19. Mixed SQL + DeQL in sequence
+-- ============================================================
+SELECT 'smoke test complete' AS status;

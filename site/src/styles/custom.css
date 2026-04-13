@@ -1,0 +1,49 @@
+/* Purple gradient background for the splash landing page */
+
+/* Gradient on the full page wrapper (splash only) */
+.page:has(.hero) {
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(120, 60, 200, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 0%, rgba(60, 80, 220, 0.14) 0%, transparent 50%) !important;
+}
+
+/* Make all nested containers transparent on splash */
+.page:has(.hero) .main-pane,
+.page:has(.hero) .main-frame,
+.page:has(.hero) .content-panel {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Light mode: softer gradient on splash */
+:root:not([data-theme="dark"]) .page:has(.hero) {
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(120, 60, 200, 0.10) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 0%, rgba(60, 80, 220, 0.08) 0%, transparent 50%),
+    linear-gradient(180deg, rgba(120, 60, 200, 0.05) 0%, rgba(255,255,255,0) 50%) !important;
+}
+
+/* Header bar: transparent + blur on ALL pages */
+header.header {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-bottom: none !important;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+/* Center-align mermaid diagrams */
+.mermaid-container,
+pre.mermaid,
+.mermaid {
+  display: flex;
+  justify-content: center;
+  text-align: center;
+}
+
+/* Site title color matching logo purple */
+.site-title span {
+  color: #C792EA !important;
+}
+
+/* Asciinema player — remove CSS font override, handled by API */

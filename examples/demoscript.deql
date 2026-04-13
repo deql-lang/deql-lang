@@ -1,0 +1,91 @@
+-- Let’s create an aggregate boundary for our Employee domain.
+-- It will process two commands: hire and promote.
+
+CREATE AGGREGATE Employee;
+
+CREATE COMMAND HireEmployee (
+  employee_id STRING,
+  name        STRING,
+  grade       STRING
+);
+
+CREATE COMMAND PromoteEmployee (
+  employee_id STRING,
+  new_grade   STRING
+);
+
+-- We need business logic that can allow or reject hiring and promotions.
+-- So we’ll register two events and decisions which write events.
+
+CREATE EVENT EmployeeHired (
+  name  STRING,
+  grade STRING
+);
+
+CREATE EVENT EmployeePromoted (
+  new_grade STRING
+);
+
+CREATE DECISION Hire
+FOR Employee
+ON COMMAND HireEmployee
+EMIT AS
+  SELECT EVENT EmployeeHired (
+    name  := :name,
+    grade := :grade
+  );
+/* An employee should only be promoted when the new grade is different from their current grade. */
+CREATE DECISION Promote
+FOR Employee
+ON COMMAND PromoteEmployee
+STATE AS
+  SELECT
+    LAST(
+      CASE
+        WHEN event_type = 'EmployeeHired'     THEN data.grade
+        WHEN event_type = 'EmployeePromoted' THEN data.new_grade
+        ELSE NULL
+      END
+    ) AS current_grade
+  FROM DeReg."Employee$Events"
+  WHERE stream_id = :employee_id
+EMIT AS
+  SELECT EVENT EmployeePromoted (
+    new_grade := :new_grade
+  )
+  WHERE :new_grade <> current_grade;
+
+-- Finally, we need read-only reports:
+-- a new-hire report for Finance/Admin, and a promotions report for Accounts.
+-- So we’ll create two projections.
+
+CREATE PROJECTION NewHireReport AS
+SELECT
+  stream_id AS employee_id,
+  LAST(data.name)  AS name,
+  LAST(data.grade) AS hired_grade
+FROM DeReg."Employee$Events"
+WHERE event_type = 'EmployeeHired'
+GROUP BY stream_id;
+
+CREATE PROJECTION PromotionsReport AS
+SELECT
+  stream_id AS employee_id,
+  seq,
+  data.new_grade AS promoted_to
+FROM DeReg."Employee$Events"
+WHERE event_type = 'EmployeePromoted'
+ORDER BY employee_id, seq;
+
+-- Now system is ready to recieve commands, lets Execute a couple of commands 
+
+EXECUTE HireEmployee(employee_id := 'EMP-001', name := 'Alice', grade := 'L4');
+EXECUTE PromoteEmployee(employee_id := 'EMP-001', new_grade := 'L5');
+EXECUTE PromoteEmployee(employee_id := 'EMP-001', new_grade := 'L5');  
+
+-- Command is rejected since same person cannot be promoted to same level
+-- Review the contents of the projections (read-side reports)
+
+SELECT * FROM DeReg."NewHireReport" ORDER BY employee_id;
+
+SELECT * FROM DeReg."PromotionsReport";

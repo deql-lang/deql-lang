@@ -1,0 +1,190 @@
+-- =============================================================================
+-- Telecom Wallet System — Inspection & Tests
+--
+-- Tests covering:
+--   Top-up (credit)
+--   Debit (charge) with balance guard
+--   Insufficient balance rejection
+--   Multiple wallet types
+--   Projection verification
+-- =============================================================================
+
+-- =========================================================================
+-- Test: Main Wallet — Top-Up
+-- =========================================================================
+
+CREATE TABLE test_main_topups AS
+VALUES
+    ('wal-main-001'::UUID, 100.00),
+    ('wal-main-002'::UUID, 250.00),
+    ('wal-main-003'::UUID, 50.00);
+
+INSPECT DECISION TopUpMain
+FROM test_main_topups
+INTO main_topup_events;
+
+-- All three should produce MainWalletToppedUp events
+SELECT * FROM main_topup_events;
+
+-- =========================================================================
+-- Test: Main Wallet — Debit (sufficient balance)
+-- =========================================================================
+
+CREATE TABLE test_main_debits AS
+VALUES
+    ('wal-main-001'::UUID, 30.00, 'voice_call'),
+    ('wal-main-001'::UUID, 15.00, 'data_1gb'),
+    ('wal-main-002'::UUID, 100.00, 'international_call');
+
+INSPECT DECISION DebitMain
+FROM test_main_debits
+INTO main_debit_events;
+
+-- All should succeed (balances are sufficient after top-ups)
+SELECT * FROM main_debit_events;
+
+-- =========================================================================
+-- Test: Main Wallet — Debit Guard (insufficient balance)
+-- =========================================================================
+
+CREATE TABLE test_main_overdraft AS
+VALUES
+    ('wal-main-003'::UUID, 999.00, 'overdraft_attempt'),
+    ('wal-main-003'::UUID, 50.01, 'one_cent_over');
+
+INSPECT DECISION DebitMain
+FROM test_main_overdraft
+INTO main_overdraft_result;
+
+-- Both should be empty (rejected: balance < amount)
+SELECT * FROM main_overdraft_result;
+
+-- =========================================================================
+-- Test: Promo Wallet — Top-Up and Debit
+-- =========================================================================
+
+CREATE TABLE test_promo_topups AS
+VALUES
+    ('wal-promo-001'::UUID, 20.00),
+    ('wal-promo-002'::UUID, 5.00);
+
+INSPECT DECISION TopUpPromo
+FROM test_promo_topups
+INTO promo_topup_events;
+
+SELECT * FROM promo_topup_events;
+
+CREATE TABLE test_promo_debits AS
+VALUES
+    ('wal-promo-001'::UUID, 10.00, 'sms_bundle'),
+    ('wal-promo-002'::UUID, 5.00, 'exact_balance_debit');
+
+INSPECT DECISION DebitPromo
+FROM test_promo_debits
+INTO promo_debit_events;
+
+-- Both should succeed (10 <= 20, 5 <= 5)
+SELECT * FROM promo_debit_events;
+
+-- =========================================================================
+-- Test: Roaming Wallet — Top-Up and Guarded Debit
+-- =========================================================================
+
+CREATE TABLE test_roaming_topups AS
+VALUES
+    ('wal-roam-001'::UUID, 75.00);
+
+INSPECT DECISION TopUpRoaming
+FROM test_roaming_topups
+INTO roaming_topup_events;
+
+CREATE TABLE test_roaming_debits AS
+VALUES
+    ('wal-roam-001'::UUID, 40.00, 'roaming_data_eu'),
+    ('wal-roam-001'::UUID, 40.00, 'roaming_data_asia');  -- should fail (35 < 40)
+
+INSPECT DECISION DebitRoaming
+FROM test_roaming_debits
+INTO roaming_debit_events;
+
+-- First should succeed (75 >= 40), second should be rejected (35 < 40)
+SELECT * FROM roaming_debit_events;
+
+-- =========================================================================
+-- Test: CorporatePool Wallet — Shared Balance
+-- =========================================================================
+
+CREATE TABLE test_corp_topups AS
+VALUES
+    ('wal-corp-001'::UUID, 10000.00);
+
+INSPECT DECISION TopUpCorporatePool
+FROM test_corp_topups
+INTO corp_topup_events;
+
+CREATE TABLE test_corp_debits AS
+VALUES
+    ('wal-corp-001'::UUID, 500.00, 'employee_alice_data'),
+    ('wal-corp-001'::UUID, 750.00, 'employee_bob_intl'),
+    ('wal-corp-001'::UUID, 200.00, 'employee_carol_sms');
+
+INSPECT DECISION DebitCorporatePool
+FROM test_corp_debits
+INTO corp_debit_events;
+
+-- All should succeed against the 10,000 pool
+SELECT * FROM corp_debit_events;
+
+-- =========================================================================
+-- Test: Projection — MainWalletBalance
+-- =========================================================================
+
+CREATE TABLE all_main_events AS
+SELECT * FROM main_topup_events
+UNION ALL
+SELECT * FROM main_debit_events;
+
+INSPECT PROJECTION MainWalletBalance
+FROM all_main_events
+INTO simulated_main_balances;
+
+-- Expected:
+--   wal-main-001: 100 - 30 - 15 = 55.00
+--   wal-main-002: 250 - 100 = 150.00
+--   wal-main-003: 50.00 (no successful debits)
+SELECT wallet_id, balance
+FROM simulated_main_balances;
+
+-- =========================================================================
+-- Test: Projection — MainWalletTransactions
+-- =========================================================================
+
+INSPECT PROJECTION MainWalletTransactions
+FROM all_main_events
+INTO simulated_main_transactions;
+
+SELECT wallet_id, transaction_type, amount, balance_after, reason, occurred_at
+FROM simulated_main_transactions
+ORDER BY occurred_at DESC;
+
+-- =========================================================================
+-- Test: Production Replay — Rebuild MainWalletBalance
+-- =========================================================================
+
+-- Full rebuild
+INSPECT PROJECTION MainWalletBalance
+FROM DeReg.MainWallet$Events
+INTO DeReg.MainWalletBalance;
+
+-- Incremental catch-up
+INSPECT PROJECTION MainWalletBalance
+FROM DeReg.MainWallet$Events
+INTO DeReg.MainWalletBalance
+OFFSET 50000;
+
+-- Batched replay
+INSPECT PROJECTION MainWalletBalance
+FROM DeReg.MainWallet$Events
+INTO DeReg.MainWalletBalance
+OFFSET 0
+LIMIT 10000;

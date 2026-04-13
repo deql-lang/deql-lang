@@ -1,0 +1,215 @@
+-- =============================================================================
+-- Inventory System — Inspection & Tests
+-- Side-effect-free decision simulation and verification.
+-- =============================================================================
+
+-- =========================================================================
+-- Test: Product Registration
+-- =========================================================================
+
+-- Simulate registering new products
+CREATE TABLE test_register_products AS
+VALUES
+    ('BOLT-M8-50', 'M8x50 Hex Bolt', 'fasteners', 0.45, 'WH-EAST'),
+    ('NUT-M8',     'M8 Hex Nut',     'fasteners', 0.12, 'WH-EAST'),
+    ('WASHER-M8',  'M8 Flat Washer', 'fasteners', 0.05, 'WH-EAST');
+
+INSPECT DECISION RegisterNewProduct
+FROM test_register_products
+INTO simulated_registrations;
+
+-- Verify: all three should produce ProductRegistered events
+SELECT * FROM simulated_registrations;
+
+-- =========================================================================
+-- Test: Stock Shipping — Sufficient Stock
+-- =========================================================================
+
+CREATE TABLE test_ship_stock AS
+VALUES
+    ('BOLT-M8-50', 50,  'ORD-1001', 'Customer A'),
+    ('BOLT-M8-50', 500, 'ORD-1002', 'Customer B');  -- should fail: exceeds stock
+
+INSPECT DECISION ShipOrderStock
+FROM test_ship_stock
+INTO simulated_shipments;
+
+-- Verify: first should succeed, second should be rejected
+SELECT * FROM simulated_shipments;
+
+-- =========================================================================
+-- Test: Reorder Workflow
+-- =========================================================================
+
+CREATE TABLE test_trigger_reorders AS
+VALUES
+    ('BOLT-M8-50', 500, 'FastenerCo'),
+    ('NUT-M8',     1000, 'FastenerCo');
+
+INSPECT DECISION TriggerStockReorder
+FROM test_trigger_reorders
+INTO simulated_reorders;
+
+SELECT * FROM simulated_reorders;
+
+-- =========================================================================
+-- Test: Reorder Fulfillment
+-- =========================================================================
+
+CREATE TABLE test_fulfill_reorders AS
+VALUES
+    ('BOLT-M8-50', 500, 'FastenerCo', 'BATCH-REORDER-001');
+
+INSPECT DECISION FulfillPendingReorder
+FROM test_fulfill_reorders
+INTO simulated_fulfillments;
+
+SELECT * FROM simulated_fulfillments;
+
+-- =========================================================================
+-- Test: Stock Adjustment
+-- =========================================================================
+
+CREATE TABLE test_adjustments AS
+VALUES
+    ('BOLT-M8-50', 175, 'Physical count correction', 'warehouse-mgr'),
+    ('BOLT-M8-50', -5,  'Negative test',             'warehouse-mgr');  -- should fail
+
+INSPECT DECISION AdjustStockLevel
+FROM test_adjustments
+INTO simulated_adjustments;
+
+SELECT * FROM simulated_adjustments;
+
+-- =========================================================================
+-- Test: Projection — StockLevels (end-to-end pipeline)
+-- =========================================================================
+
+-- Combine all simulated events from prior decision inspections
+CREATE TABLE all_simulated_events AS
+SELECT * FROM simulated_registrations
+UNION ALL
+SELECT * FROM simulated_shipments
+UNION ALL
+SELECT * FROM simulated_fulfillments
+UNION ALL
+SELECT * FROM simulated_adjustments;
+
+-- Feed them through the StockLevels projection
+INSPECT PROJECTION StockLevels
+FROM all_simulated_events
+INTO simulated_stock_levels;
+
+-- Verify: projected stock levels should reflect all movements
+SELECT sku, name, quantity, last_updated
+FROM simulated_stock_levels;
+
+-- =========================================================================
+-- Test: Projection — StockMovementLog
+-- =========================================================================
+
+INSPECT PROJECTION StockMovementLog
+FROM all_simulated_events
+INTO simulated_movement_log;
+
+-- Verify: every stock movement should appear in the audit log
+SELECT sku, movement_type, quantity_change, reference, performed_by, occurred_at
+FROM simulated_movement_log
+ORDER BY occurred_at DESC;
+
+-- =========================================================================
+-- Test: Projection — PendingReorders
+-- =========================================================================
+
+-- Use reorder + fulfillment events to verify pending state
+CREATE TABLE reorder_events AS
+SELECT * FROM simulated_reorders
+UNION ALL
+SELECT * FROM simulated_fulfillments;
+
+INSPECT PROJECTION PendingReorders
+FROM reorder_events
+INTO simulated_pending_reorders;
+
+-- Verify: fulfilled reorders should not appear as pending
+SELECT sku, reorder_quantity, supplier, triggered_at
+FROM simulated_pending_reorders;
+
+-- =========================================================================
+-- Production Replay: Full Rebuild of StockLevels
+-- =========================================================================
+
+-- Rebuild the StockLevels projection from the entire event store
+INSPECT PROJECTION StockLevels
+FROM DeReg.Inventory$Events
+INTO DeReg.StockLevels;
+
+-- =========================================================================
+-- Production Replay: Incremental Catch-Up With Offset
+-- =========================================================================
+
+-- Resume StockLevels from where we last left off (sequence 50000)
+INSPECT PROJECTION StockLevels
+FROM DeReg.Inventory$Events
+INTO DeReg.StockLevels
+OFFSET 50000;
+
+-- =========================================================================
+-- Production Replay: Guarded Rebuild (Single SKU)
+-- =========================================================================
+
+-- Rebuild StockMovementLog for a single product only
+INSPECT PROJECTION StockMovementLog
+FROM DeReg.Inventory$Events
+INTO DeReg.StockMovementLog
+WHERE aggregate_id = 'BOLT-M8-50';
+
+-- =========================================================================
+-- Production Replay: Time-Bounded Rebuild
+-- =========================================================================
+
+-- Rebuild PendingReorders from events in the last 30 days only
+INSPECT PROJECTION PendingReorders
+FROM DeReg.Inventory$Events
+INTO DeReg.PendingReorders
+WHERE timestamp >= '2026-03-08';
+
+-- =========================================================================
+-- Production Replay: Batched Replay With Offset + Limit
+-- =========================================================================
+
+-- Process 10,000 events at a time for controlled throughput
+INSPECT PROJECTION StockLevels
+FROM DeReg.Inventory$Events
+INTO DeReg.StockLevels
+OFFSET 0
+LIMIT 10000;
+
+-- Next batch
+INSPECT PROJECTION StockLevels
+FROM DeReg.Inventory$Events
+INTO DeReg.StockLevels
+OFFSET 10000
+LIMIT 10000;
+
+-- =========================================================================
+-- Production Replay: Combined Offset + Guard + Limit
+-- =========================================================================
+
+-- Resume from sequence 25000, only WH-EAST warehouse, 5000 events per batch
+INSPECT PROJECTION StockLevels
+FROM DeReg.Inventory$Events
+INTO DeReg.StockLevels
+OFFSET 25000
+WHERE data.warehouse = 'WH-EAST'
+LIMIT 5000;
+
+-- =========================================================================
+-- Shadow Projection: Zero-Downtime Migration
+-- =========================================================================
+
+-- Build a new version of StockLevels alongside the existing one
+INSPECT PROJECTION StockLevelsV2
+FROM DeReg.Inventory$Events
+INTO StockLevelsV2_staging
+OFFSET 0;

@@ -1,0 +1,6 @@
+-- =============================================================================
+-- Inventory System — Aggregates
+-- Named state boundaries. State is derived from events and queried via $Agg.
+-- =============================================================================
+
+CREATE AGGREGATE Inventory;

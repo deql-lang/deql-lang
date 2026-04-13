@@ -1,0 +1,34 @@
+-- =============================================================================
+-- Inventory System — Templates
+-- Reusable, compile-time domain patterns.
+-- =============================================================================
+
+-- A reusable pattern for any entity that can be soft-deleted with a reason
+CREATE TEMPLATE SoftDeletable (EntityName) AS (
+
+    CREATE COMMAND Delete{{EntityName}} (
+        id     UUID,
+        reason STRING
+    );
+
+    CREATE EVENT {{EntityName}}Deleted (
+        reason STRING
+    );
+
+    CREATE DECISION Delete{{EntityName}}Record
+    FOR {{EntityName}}
+    ON COMMAND Delete{{EntityName}}
+    STATE AS
+        SELECT is_deleted FROM {{EntityName}}$Agg
+        WHERE aggregate_id = :id
+    EMIT AS
+        SELECT EVENT {{EntityName}}Deleted (
+            reason := :reason
+        )
+        WHERE is_deleted = FALSE;
+);
+
+-- Instantiate the soft-delete pattern for Inventory
+USE TEMPLATE SoftDeletable WITH (
+    EntityName = 'Inventory'
+);

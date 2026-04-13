@@ -1,0 +1,54 @@
+-- =============================================================================
+-- Inventory System — Commands
+-- External intents entering the system.
+-- =============================================================================
+
+-- Product management
+CREATE COMMAND RegisterProduct (
+    sku        STRING,
+    name       STRING,
+    category   STRING,
+    unit_price DECIMAL(10,2),
+    warehouse  STRING
+);
+
+CREATE COMMAND DiscontinueProduct (
+    sku    STRING,
+    reason STRING
+);
+
+-- Stock operations
+CREATE COMMAND ReceiveStock (
+    sku         STRING,
+    quantity    INT,
+    received_by STRING,
+    batch_id    STRING
+);
+
+CREATE COMMAND ShipStock (
+    sku         STRING,
+    quantity    INT,
+    order_id    STRING,
+    destination STRING
+);
+
+CREATE COMMAND AdjustStock (
+    sku          STRING,
+    new_quantity INT,
+    reason       STRING,
+    adjusted_by  STRING
+);
+
+-- Reorder management
+CREATE COMMAND TriggerReorder (
+    sku              STRING,
+    reorder_quantity INT,
+    supplier         STRING
+);
+
+CREATE COMMAND FulfillReorder (
+    sku      STRING,
+    quantity INT,
+    supplier STRING,
+    batch_id STRING
+);

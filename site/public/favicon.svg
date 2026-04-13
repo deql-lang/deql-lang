@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 100 100"
+     title="DeQL Icon Only">
+
+  <!-- GraphQL original color with safe fallback -->
+  <style>
+    .brand { fill: #e10098; }
+    @supports (color: color(display-p3 1 0 0)) {
+      .brand { fill: color(display-p3 .8824 0 .5961); }
+    }
+  </style>
+
+  <!-- Icon shifted up to align bottom correctly -->
+  <g class="brand" transform="translate(0 -6)">
+
+    <!-- Hub with hole (donut) -->
+    <path fill-rule="evenodd" d="
+      M50 74
+      m -14 0
+      a 14 14 0 1 0 28 0
+      a 14 14 0 1 0 -28 0
+      M50 74
+      m -5.5 0
+      a 5.5 5.5 0 1 0 11 0
+      a 5.5 5.5 0 1 0 -11 0
+    " />
+
+    <!-- Long hand (12 o’clock): broad base, sharp tip, vertical, with gap -->
+    <path d="M50 12 L56 57 L44 57 Z" />
+
+    <!-- Short hand (3 o’clock): moved right to add space from hub -->
+    <!-- Base x changed: 58 -> 61 -->
+    <path d="M92 74 L65 80 L65 68 Z" />
+  </g>
+</svg>
