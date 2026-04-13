@@ -8,6 +8,7 @@ import deqlTheme from './deql-theme.mjs';
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://deql-lang.github.io',
+	base: '/deql-lang/',
 	markdown: {
 		shikiConfig: {
 			langs: [deqlGrammar],
