@@ -1,0 +1,316 @@
+-- =============================================================================
+-- Digital Registry System — DeQL Demo
+--
+-- A government digital registry platform inspired by the Daksha-RC pattern.
+-- Registries manage entities (citizens, schools, facilities, vehicles, etc.)
+-- through a standard lifecycle: Create → Modify → Deactivate → Delete.
+--
+-- The key insight: every registry entity follows the SAME lifecycle pattern
+-- regardless of its schema. A citizen has name/address/id_number fields,
+-- a school has name/district/capacity fields, but both go through the same
+-- state transitions. This makes registries a perfect fit for templates.
+--
+-- The RegistryEntity template captures the lifecycle once. Adding a new
+-- entity type to the system is a single APPLY TEMPLATE call — no new
+-- commands, events, or decisions to hand-write.
+--
+-- Run: cargo run -- -f deql-lang/examples/registry-system/demo.deql
+-- =============================================================================
+
+
+-- =====================================================================
+-- 1. EVENTSTORE
+-- =====================================================================
+
+CREATE EVENTSTORE registry_local WITH (
+    envelope.event_id_key    = 'event_id',
+    durable.type             = 'parquet',
+    durable.path             = '/tmp/deql/registry/',
+    strict.immutable_events  = true
+);
+
+
+-- =====================================================================
+-- 2. THE TEMPLATE — RegistryEntity lifecycle pattern
+--
+-- What a registry entity needs:
+--   1 aggregate (the entity boundary)
+--   3 commands  (Create, Modify, Deactivate)
+--   3 events    (Created, Updated, Deactivated)
+--   3 decisions (with business rules)
+--
+-- Parameters:
+--   {{EntityName}} — the entity type name (e.g., Citizen, School)
+--   {{Fields}}     — domain-specific fields, expanded into commands/events
+--   {{FieldAssignments}} — auto-generated := bindings for emit clauses
+--
+-- Each APPLY generates 10 definitions from 2 parameters.
+-- =====================================================================
+
+CREATE TEMPLATE RegistryEntity (EntityName, Fields) AS (
+
+    -- Aggregate: one per entity type
+    CREATE AGGREGATE {{EntityName}};
+
+    -- Command: create a new entity
+    CREATE COMMAND Create{{EntityName}} (
+        entity_id  STRING,
+        created_by STRING,
+        {{Fields}}
+    );
+
+    -- Command: modify an existing entity
+    CREATE COMMAND Modify{{EntityName}} (
+        entity_id   STRING,
+        modified_by STRING,
+        {{Fields}}
+    );
+
+    -- Command: deactivate an entity
+    CREATE COMMAND Deactivate{{EntityName}} (
+        entity_id      STRING,
+        deactivated_by STRING
+    );
+
+    -- Event: entity was created
+    CREATE EVENT {{EntityName}}Created (
+        created_by STRING,
+        {{Fields}}
+    );
+
+    -- Event: entity was updated
+    CREATE EVENT {{EntityName}}Updated (
+        modified_by STRING,
+        {{Fields}}
+    );
+
+    -- Event: entity was deactivated
+    CREATE EVENT {{EntityName}}Deactivated (
+        deactivated_by STRING
+    );
+
+    -- Decision: create (unconditional — first event for this entity_id)
+    CREATE DECISION Create{{EntityName}}Entity
+    FOR {{EntityName}}
+    ON COMMAND Create{{EntityName}}
+    EMIT AS
+        SELECT EVENT {{EntityName}}Created (
+            created_by := :created_by,
+            {{FieldsAssignments}}
+        );
+
+    -- Decision: modify (unconditional for demo — production would guard on state)
+    CREATE DECISION Modify{{EntityName}}Entity
+    FOR {{EntityName}}
+    ON COMMAND Modify{{EntityName}}
+    EMIT AS
+        SELECT EVENT {{EntityName}}Updated (
+            modified_by := :modified_by,
+            {{FieldsAssignments}}
+        );
+
+    -- Decision: deactivate
+    CREATE DECISION Deactivate{{EntityName}}Entity
+    FOR {{EntityName}}
+    ON COMMAND Deactivate{{EntityName}}
+    EMIT AS
+        SELECT EVENT {{EntityName}}Deactivated (
+            deactivated_by := :deactivated_by
+        );
+);
+
+
+-- =====================================================================
+-- 3. APPLY TEMPLATE — instantiate the first three registries
+--
+-- This is the power of templates: each line below generates a complete
+-- aggregate + commands + events + decisions for a new entity type.
+-- The Fields parameter carries the domain-specific schema.
+-- =====================================================================
+
+-- Citizen registry (national ID, voter rolls, social services)
+APPLY TEMPLATE RegistryEntity WITH (
+    EntityName = 'Citizen',
+    Fields = (
+        full_name     STRING,
+        date_of_birth STRING,
+        address       STRING,
+        id_number     STRING
+    )
+);
+
+-- School registry (education department)
+APPLY TEMPLATE RegistryEntity WITH (
+    EntityName = 'School',
+    Fields = (
+        school_name STRING,
+        district    STRING,
+        principal   STRING,
+        capacity    INT
+    )
+);
+
+-- Healthcare facility registry
+APPLY TEMPLATE RegistryEntity WITH (
+    EntityName = 'HealthFacility',
+    Fields = (
+        facility_name  STRING,
+        facility_type  STRING,
+        license_number STRING,
+        district       STRING,
+        bed_count      INT
+    )
+);
+
+-- See what was generated: 30 definitions from 3 APPLY calls
+DESCRIBE TEMPLATE RegistryEntity;
+DESCRIBE TEMPLATES;
+DESCRIBE AGGREGATES;
+DESCRIBE COMMANDS;
+DESCRIBE DECISIONS;
+
+
+-- =====================================================================
+-- 4. EXECUTE — run the citizen registry story
+-- =====================================================================
+
+-- Register citizens
+EXECUTE CreateCitizen(entity_id := 'CIT-001', created_by := 'admin', full_name := 'Alice Smith', date_of_birth := '1990-05-15', address := '123 Main St', id_number := 'ID-001');
+EXECUTE CreateCitizen(entity_id := 'CIT-002', created_by := 'admin', full_name := 'Bob Jones', date_of_birth := '1985-11-20', address := '456 Oak Ave', id_number := 'ID-002');
+EXECUTE CreateCitizen(entity_id := 'CIT-003', created_by := 'registrar', full_name := 'Carol White', date_of_birth := '1978-03-10', address := '789 Pine Rd', id_number := 'ID-003');
+
+-- Modify a citizen (address change)
+EXECUTE ModifyCitizen(entity_id := 'CIT-001', modified_by := 'admin', full_name := 'Alice Smith-Johnson', date_of_birth := '1990-05-15', address := '999 New Blvd', id_number := 'ID-001');
+
+-- Deactivate a citizen
+EXECUTE DeactivateCitizen(entity_id := 'CIT-003', deactivated_by := 'admin');
+
+
+-- =====================================================================
+-- 5. EXECUTE — run the school registry story
+-- =====================================================================
+
+EXECUTE CreateSchool(entity_id := 'SCH-001', created_by := 'edu_admin', school_name := 'Springfield Elementary', district := 'Springfield', principal := 'Seymour Skinner', capacity := 500);
+EXECUTE CreateSchool(entity_id := 'SCH-002', created_by := 'edu_admin', school_name := 'Shelbyville High', district := 'Shelbyville', principal := 'Jane Doe', capacity := 1200);
+
+-- Modify school capacity
+EXECUTE ModifySchool(entity_id := 'SCH-001', modified_by := 'edu_admin', school_name := 'Springfield Elementary', district := 'Springfield', principal := 'Seymour Skinner', capacity := 550);
+
+
+-- =====================================================================
+-- 6. EXECUTE — run the health facility registry story
+-- =====================================================================
+
+EXECUTE CreateHealthFacility(entity_id := 'HF-001', created_by := 'health_admin', facility_name := 'City General Hospital', facility_type := 'hospital', license_number := 'LIC-2024-001', district := 'Central', bed_count := 300);
+EXECUTE CreateHealthFacility(entity_id := 'HF-002', created_by := 'health_admin', facility_name := 'Riverside Clinic', facility_type := 'clinic', license_number := 'LIC-2024-002', district := 'Riverside', bed_count := 25);
+
+
+-- =====================================================================
+-- 7. QUERY — see the results across all registries
+-- =====================================================================
+
+-- Citizen events
+SELECT stream_id, event_type, seq
+FROM DeReg."Citizen$Events"
+ORDER BY stream_id, seq;
+
+-- School events
+SELECT stream_id, event_type, seq
+FROM DeReg."School$Events"
+ORDER BY stream_id, seq;
+
+-- Health facility events
+SELECT stream_id, event_type, seq
+FROM DeReg."HealthFacility$Events"
+ORDER BY stream_id, seq;
+
+
+-- =====================================================================
+-- 8. THE EXTENSIBILITY STORY — adding a new entity type
+--
+-- Six months later, the government needs a Vehicle registry for
+-- transport department. No new code, no new decisions, no new events.
+-- Just one APPLY TEMPLATE call.
+-- =====================================================================
+
+APPLY TEMPLATE RegistryEntity WITH (
+    EntityName = 'Vehicle',
+    Fields = (
+        plate_number  STRING,
+        make          STRING,
+        model         STRING,
+        year          INT,
+        owner_id      STRING
+    )
+);
+
+-- Immediately usable — register vehicles
+EXECUTE CreateVehicle(entity_id := 'VEH-001', created_by := 'transport_admin', plate_number := 'ABC-1234', make := 'Toyota', model := 'Hilux', year := 2023, owner_id := 'CIT-001');
+EXECUTE CreateVehicle(entity_id := 'VEH-002', created_by := 'transport_admin', plate_number := 'XYZ-5678', make := 'Honda', model := 'Civic', year := 2024, owner_id := 'CIT-002');
+
+-- Transfer ownership (modify)
+EXECUTE ModifyVehicle(entity_id := 'VEH-001', modified_by := 'transport_admin', plate_number := 'ABC-1234', make := 'Toyota', model := 'Hilux', year := 2023, owner_id := 'CIT-002');
+
+-- Query vehicle events
+SELECT stream_id, event_type, seq
+FROM DeReg."Vehicle$Events"
+ORDER BY stream_id, seq;
+
+-- See the updated template instances — now 4 registries from 1 template
+DESCRIBE TEMPLATE RegistryEntity;
+
+
+-- =====================================================================
+-- 9. AND ANOTHER — Land Parcel registry for the land department
+--
+-- The pattern scales: each new department gets a full registry by
+-- adding one APPLY TEMPLATE call. The lifecycle rules, event schema,
+-- and decision logic are inherited from the template.
+-- =====================================================================
+
+APPLY TEMPLATE RegistryEntity WITH (
+    EntityName = 'LandParcel',
+    Fields = (
+        parcel_id    STRING,
+        area_sqm     DECIMAL(12,2),
+        land_use     STRING,
+        district     STRING,
+        owner_id     STRING
+    )
+);
+
+EXECUTE CreateLandParcel(entity_id := 'LP-001', created_by := 'land_admin', parcel_id := 'P-2024-0001', area_sqm := 5000.00, land_use := 'residential', district := 'Central', owner_id := 'CIT-001');
+EXECUTE CreateLandParcel(entity_id := 'LP-002', created_by := 'land_admin', parcel_id := 'P-2024-0002', area_sqm := 12000.50, land_use := 'commercial', district := 'Riverside', owner_id := 'CIT-002');
+
+SELECT stream_id, event_type, seq
+FROM DeReg."LandParcel$Events"
+ORDER BY stream_id, seq;
+
+-- Final state: 5 registries, 50 definitions, all from 1 template
+DESCRIBE TEMPLATE RegistryEntity;
+DESCRIBE AGGREGATES;
+
+
+-- =====================================================================
+-- 10. INSPECT — simulate a new entity type without side effects
+-- =====================================================================
+
+CREATE TABLE test_create_citizens AS VALUES
+    ('CIT-100', 'batch_admin', 'Test Person A', '2000-01-01', '1 Test St', 'ID-100'),
+    ('CIT-101', 'batch_admin', 'Test Person B', '1995-06-15', '2 Test Ave', 'ID-101');
+
+INSPECT DECISION CreateCitizenEntity
+FROM test_create_citizens
+INTO simulated_citizen_events;
+
+SELECT stream_id, event_type, data FROM simulated_citizen_events;
+
+
+-- =====================================================================
+-- 11. VALIDATE & EXPORT
+-- =====================================================================
+
+VALIDATE DEREG;
+EXPORT DEREG;
+
+SELECT 'registry demo complete' AS status;

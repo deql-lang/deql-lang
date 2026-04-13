@@ -1,0 +1,254 @@
+-- =============================================================================
+-- Inventory Management System — DeQL Demo
+--
+-- A multi-warehouse system that tracks different categories of stock items.
+-- Each category (fasteners, tools, raw materials) follows the same lifecycle
+-- pattern: register → receive → ship → adjust → discontinue. Instead of
+-- hand-writing the same commands, events, and decisions for each category,
+-- we define a TEMPLATE once and APPLY it per category.
+--
+-- Run: cargo run -- -f deql-lang/examples/inventory-system/demo.deql
+-- =============================================================================
+
+
+-- =====================================================================
+-- 1. EVENTSTORE — configure storage
+-- =====================================================================
+
+CREATE EVENTSTORE inventory_local WITH (
+    envelope.event_id_key    = 'event_id',
+    durable.type             = 'parquet',
+    durable.path             = '/tmp/deql/inventory/',
+    strict.immutable_events  = true
+);
+
+
+-- =====================================================================
+-- 2. TEMPLATE — the reusable stock item lifecycle pattern
+--
+-- Every stock category needs the same structure:
+--   Aggregate, 4 commands, 4 events, 4 decisions
+-- The template captures this once. {{Category}} is substituted with
+-- the category name (e.g., Fastener, Tool, Material).
+-- =====================================================================
+
+CREATE TEMPLATE StockItem (Category) AS (
+
+    -- Aggregate: one per stock category
+    CREATE AGGREGATE {{Category}};
+
+    -- Commands
+    CREATE COMMAND Register{{Category}} (
+        sku        STRING,
+        name       STRING,
+        unit_price DECIMAL(10,2),
+        warehouse  STRING
+    );
+
+    CREATE COMMAND Receive{{Category}} (
+        sku         STRING,
+        quantity    INT,
+        received_by STRING,
+        batch_id    STRING
+    );
+
+    CREATE COMMAND Ship{{Category}} (
+        sku         STRING,
+        quantity    INT,
+        order_id    STRING,
+        destination STRING
+    );
+
+    CREATE COMMAND Discontinue{{Category}} (
+        sku    STRING,
+        reason STRING
+    );
+
+    -- Events
+    CREATE EVENT {{Category}}Registered (
+        name       STRING,
+        unit_price DECIMAL(10,2),
+        warehouse  STRING
+    );
+
+    CREATE EVENT {{Category}}Received (
+        quantity    INT,
+        received_by STRING,
+        batch_id    STRING
+    );
+
+    CREATE EVENT {{Category}}Shipped (
+        quantity    INT,
+        order_id    STRING,
+        destination STRING
+    );
+
+    CREATE EVENT {{Category}}Discontinued (
+        reason STRING
+    );
+
+    -- Decisions with business rules
+
+    CREATE DECISION Register{{Category}}Item
+    FOR {{Category}}
+    ON COMMAND Register{{Category}}
+    EMIT AS
+        SELECT EVENT {{Category}}Registered (
+            name       := :name,
+            unit_price := :unit_price,
+            warehouse  := :warehouse
+        );
+
+    CREATE DECISION Receive{{Category}}Stock
+    FOR {{Category}}
+    ON COMMAND Receive{{Category}}
+    EMIT AS
+        SELECT EVENT {{Category}}Received (
+            quantity    := :quantity,
+            received_by := :received_by,
+            batch_id    := :batch_id
+        )
+        WHERE :quantity > 0;
+
+    CREATE DECISION Ship{{Category}}Stock
+    FOR {{Category}}
+    ON COMMAND Ship{{Category}}
+    EMIT AS
+        SELECT EVENT {{Category}}Shipped (
+            quantity    := :quantity,
+            order_id    := :order_id,
+            destination := :destination
+        )
+        WHERE :quantity > 0;
+
+    CREATE DECISION Discontinue{{Category}}Item
+    FOR {{Category}}
+    ON COMMAND Discontinue{{Category}}
+    EMIT AS
+        SELECT EVENT {{Category}}Discontinued (
+            reason := :reason
+        );
+);
+
+
+-- =====================================================================
+-- 3. APPLY TEMPLATE — instantiate for each stock category
+--
+-- One line per category. Each APPLY generates an aggregate, 4 commands,
+-- 4 events, and 4 decisions — 13 definitions from a single call.
+-- =====================================================================
+
+APPLY TEMPLATE StockItem WITH (Category = 'Fastener');
+APPLY TEMPLATE StockItem WITH (Category = 'Tool');
+APPLY TEMPLATE StockItem WITH (Category = 'Material');
+
+-- See what was generated
+DESCRIBE TEMPLATE StockItem;
+DESCRIBE TEMPLATES;
+DESCRIBE AGGREGATES;
+DESCRIBE COMMANDS;
+DESCRIBE EVENTS;
+DESCRIBE DECISIONS;
+
+
+-- =====================================================================
+-- 4. PROJECTIONS — read models across all categories
+-- =====================================================================
+
+-- Fastener stock levels (counts events by type)
+CREATE PROJECTION FastenerStockLevels AS
+SELECT
+    stream_id AS sku,
+    COUNT(*) FILTER (WHERE event_type = 'FastenerReceived') AS receive_count,
+    COUNT(*) FILTER (WHERE event_type = 'FastenerShipped') AS ship_count,
+    MAX(occurred_at) AS last_updated
+FROM DeReg."Fastener$Events"
+GROUP BY stream_id;
+
+-- Tool stock levels
+CREATE PROJECTION ToolStockLevels AS
+SELECT
+    stream_id AS sku,
+    COUNT(*) FILTER (WHERE event_type = 'ToolReceived') AS receive_count,
+    COUNT(*) FILTER (WHERE event_type = 'ToolShipped') AS ship_count,
+    MAX(occurred_at) AS last_updated
+FROM DeReg."Tool$Events"
+GROUP BY stream_id;
+
+
+-- =====================================================================
+-- 5. EXECUTE — run the warehouse story
+-- =====================================================================
+
+-- Register fasteners
+EXECUTE RegisterFastener(sku := 'BOLT-M8-50', name := 'M8x50 Hex Bolt', unit_price := 0.45, warehouse := 'WH-EAST');
+EXECUTE RegisterFastener(sku := 'NUT-M8',     name := 'M8 Hex Nut',     unit_price := 0.12, warehouse := 'WH-EAST');
+
+-- Register tools
+EXECUTE RegisterTool(sku := 'WRENCH-13', name := '13mm Combo Wrench', unit_price := 12.50, warehouse := 'WH-WEST');
+EXECUTE RegisterTool(sku := 'DRILL-M6',  name := 'M6 HSS Drill Bit',  unit_price := 3.75,  warehouse := 'WH-WEST');
+
+-- Register raw materials
+EXECUTE RegisterMaterial(sku := 'STEEL-ROD-6M', name := '6m Steel Rod 12mm', unit_price := 18.00, warehouse := 'WH-NORTH');
+
+-- Receive stock
+EXECUTE ReceiveFastener(sku := 'BOLT-M8-50', quantity := 500, received_by := 'dock-crew', batch_id := 'BATCH-F001');
+EXECUTE ReceiveFastener(sku := 'NUT-M8',     quantity := 1000, received_by := 'dock-crew', batch_id := 'BATCH-F001');
+EXECUTE ReceiveTool(sku := 'WRENCH-13',      quantity := 50,  received_by := 'dock-crew', batch_id := 'BATCH-T001');
+EXECUTE ReceiveMaterial(sku := 'STEEL-ROD-6M', quantity := 200, received_by := 'dock-crew', batch_id := 'BATCH-M001');
+
+-- Ship fasteners to a customer
+EXECUTE ShipFastener(sku := 'BOLT-M8-50', quantity := 100, order_id := 'ORD-1001', destination := 'Customer A');
+EXECUTE ShipFastener(sku := 'NUT-M8',     quantity := 200, order_id := 'ORD-1001', destination := 'Customer A');
+
+-- Ship tools
+EXECUTE ShipTool(sku := 'WRENCH-13', quantity := 5, order_id := 'ORD-1002', destination := 'Customer B');
+
+-- Discontinue a drill bit
+EXECUTE DiscontinueTool(sku := 'DRILL-M6', reason := 'Replaced by carbide version');
+
+
+-- =====================================================================
+-- 6. QUERY — see the results
+-- =====================================================================
+
+-- Fastener events
+SELECT stream_id, event_type, seq
+FROM DeReg."Fastener$Events"
+ORDER BY stream_id, seq;
+
+-- Tool events
+SELECT stream_id, event_type, seq
+FROM DeReg."Tool$Events"
+ORDER BY stream_id, seq;
+
+-- Material events
+SELECT stream_id, event_type, seq
+FROM DeReg."Material$Events"
+ORDER BY stream_id, seq;
+
+
+-- =====================================================================
+-- 7. INSPECT — side-effect-free simulation
+-- =====================================================================
+
+-- Simulate registering new fasteners
+CREATE TABLE test_register_fasteners AS VALUES
+    ('SCREW-M6-25', 'M6x25 Machine Screw', 0.08, 'WH-EAST'),
+    ('ANCHOR-M10',  'M10 Wedge Anchor',    1.25, 'WH-EAST');
+
+INSPECT DECISION RegisterFastenerItem
+FROM test_register_fasteners
+INTO simulated_registrations;
+
+SELECT stream_id, event_type, data FROM simulated_registrations;
+
+
+-- =====================================================================
+-- 8. VALIDATE & EXPORT
+-- =====================================================================
+
+VALIDATE DEREG;
+EXPORT DEREG;
+
+SELECT 'inventory demo complete' AS status;

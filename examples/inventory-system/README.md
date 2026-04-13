@@ -1,22 +1,40 @@
-# Inventory Management System — DeQL Example
+# Inventory Management System — DeQL Demo
 
-A complete end-to-end example demonstrating all DeQL concepts through an inventory management domain.
+A multi-warehouse system that tracks different categories of stock items. Each category (fasteners, tools, raw materials) follows the same lifecycle pattern. Instead of hand-writing the same commands, events, and decisions for each category, we define a `StockItem` template once and apply it per category.
 
-## Domain
+## The Template Story
 
-A warehouse system that tracks products, handles stock movements, and supports order fulfillment.
+The `StockItem` template captures the full stock item lifecycle:
+- Register → Receive → Ship → Discontinue
+- 1 aggregate, 4 commands, 4 events, 4 decisions = 13 definitions
 
-## Files
-
-| File | Concept | Description |
-|---|---|---|
-| `aggregates.deql` | AGGREGATE | Named state boundary (`Inventory`) |
-| `events.deql` | EVENT | All domain events (7 event types) |
-| `commands.deql` | COMMAND | All inbound intents (7 command types) |
-| `decisions.deql` | DECISION | Business rules with STATE AS / EMIT AS |
-| `projections.deql` | PROJECTION | Read models (StockLevels, MovementLog, PendingReorders) |
-| `templates.deql` | TEMPLATE | Reusable SoftDeletable pattern |
-| `eventstore.deql` | EVENTSTORE | Storage config (local dev + production) |
-| `inspect.deql` | INSPECT | Tests and simulations |
+Three `APPLY TEMPLATE` calls generate 39 definitions total:
+```deql
+APPLY TEMPLATE StockItem WITH (Category = 'Fastener');
+APPLY TEMPLATE StockItem WITH (Category = 'Tool');
+APPLY TEMPLATE StockItem WITH (Category = 'Material');
+```
 
 ## Running
+
+```bash
+cargo run -- -f deql-lang/examples/inventory-system/demo.deql
+```
+
+## Concepts Covered
+
+| Concept | What it does in this demo |
+|---|---|
+| TEMPLATE | `StockItem` — reusable lifecycle pattern for any stock category |
+| APPLY TEMPLATE | Instantiate for Fastener, Tool, Material (39 definitions from 3 lines) |
+| AGGREGATE | One per category: Fastener, Tool, Material |
+| COMMAND | 4 per category: Register, Receive, Ship, Discontinue |
+| EVENT | 4 per category: Registered, Received, Shipped, Discontinued |
+| DECISION | 4 per category with WHERE guards |
+| PROJECTION | Stock levels per category using COUNT FILTER |
+| EVENTSTORE | Local dev config with Parquet storage |
+| EXECUTE | Full warehouse scenario across all categories |
+| INSPECT | Simulated registrations |
+| DESCRIBE | Introspect the domain model + template instances |
+| VALIDATE | Cross-reference consistency check |
+| EXPORT | Dump the registry as reproducible DeQL |

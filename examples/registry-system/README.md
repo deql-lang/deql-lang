@@ -1,32 +1,54 @@
-# Registry System — DeQL Example
+# Digital Registry System — DeQL Demo
 
-A complete example demonstrating how the DeQL `RegistryEntity` template implements the [Daksha-RC](https://daksha-rc.github.io/daksha-rc-core/daksha-rc-registry.html) registry pattern — managing entities through a finite lifecycle of create, invite, modify, deactivate, and delete.
+A government digital registry platform inspired by the [Daksha-RC](https://daksha-rc.github.io/daksha-rc-core/daksha-rc-registry.html) pattern. Registries manage entities (citizens, schools, facilities, vehicles, land parcels) through a standard lifecycle.
 
-## Domain
+## The Registry Concept
 
-A government digital registry platform managing citizens, schools, and healthcare facilities. Each entity type shares the same lifecycle state machine but carries different domain-specific fields.
-
-## Entity Lifecycle
+Every registry entity — regardless of its domain — follows the same lifecycle:
 
 ```
-None ──────► Active              (CreateEntity)
-None ──────► Invited             (InviteEntity)
-Invited ───► Active              (CreateEntity)
-Active ────► Modified            (ModifyEntity)
-Modified ──► Modified            (ModifyEntity)
-Active ────► Deactivated         (DeactivateEntity)
-Modified ──► Deactivated         (DeactivateEntity)
-Active ────► MarkedForDeletion   (DeleteEntity)
-Modified ──► MarkedForDeletion   (DeleteEntity)
+Create → Active → Modify → Modified → Deactivate → Deactivated
 ```
 
-## Files
+A citizen has name/address/id_number fields. A school has name/district/capacity fields. A vehicle has plate_number/make/model fields. But they all go through the same state transitions with the same commands, events, and decisions.
 
-| File | Description |
-|---|---|
-| `template.deql` | The reusable `RegistryEntity` template |
-| `registries.deql` | Instantiations for Citizen, School, HealthFacility |
-| `eventstore.deql` | Storage configuration |
-| `inspect.deql` | Tests covering the full entity lifecycle |
+This makes registries a natural fit for templates.
+
+## The Template Story
+
+The `RegistryEntity` template captures the lifecycle once:
+- 1 aggregate, 3 commands, 3 events, 3 decisions = 10 definitions per entity type
+
+Adding a new entity type to the system is a single `APPLY TEMPLATE` call:
+
+```deql
+APPLY TEMPLATE RegistryEntity WITH (
+    EntityName = 'Citizen',
+    Fields = (full_name STRING, date_of_birth STRING, address STRING, id_number STRING)
+);
+```
+
+The demo starts with 3 registries (Citizen, School, HealthFacility), then shows how the system grows over time:
+- 6 months later: Vehicle registry added (1 line)
+- Later still: LandParcel registry added (1 line)
+
+Final state: 5 registries, 50 definitions, all from 1 template.
 
 ## Running
+
+```bash
+cargo run -- -f deql-lang/examples/registry-system/demo.deql
+```
+
+## Concepts Covered
+
+| Concept | What it does in this demo |
+|---|---|
+| TEMPLATE | `RegistryEntity` — lifecycle pattern with `{{Fields}}` and `{{FieldsAssignments}}` |
+| APPLY TEMPLATE | 5 instantiations showing incremental system growth |
+| {{Fields}} | Dynamic field declarations per entity type |
+| {{FieldsAssignments}} | Auto-generated `:= :field` bindings in emit clauses |
+| EXECUTE | Full lifecycle stories for citizens, schools, facilities, vehicles, land parcels |
+| DESCRIBE TEMPLATE | Shows all 5 instances with their parameters |
+| INSPECT | Simulated batch citizen creation |
+| VALIDATE / EXPORT | Consistency check and reproducible output |

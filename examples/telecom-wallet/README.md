@@ -1,26 +1,38 @@
-# Telecom Wallet System — DeQL Example
+# Telecom Wallet System — DeQL Demo
 
-A telecom billing example demonstrating how the `wallet_aggregate` template enables multiple wallet types per subscriber — each with the same top-up/debit mechanics but different business context.
+A mobile operator manages subscriber balances across multiple wallet types. Every subscriber can have several wallets — main balance, promotional credits, roaming allowance, corporate pool — each following the same top-up/debit pattern but carrying different business context.
 
-## Domain
+## The Wallet Story
 
-A mobile operator manages subscriber balances across multiple wallet types:
+The `wallet_aggregate` template captures the top-up/debit lifecycle once:
+- 1 aggregate, 2 commands, 2 events, 2 decisions = 7 definitions per wallet type
 
-- Main — primary prepaid/postpaid balance
-- Promo — promotional credits from campaigns
-- Roaming — dedicated roaming allowance
-- CorporatePool — shared balance for enterprise accounts
+The demo starts with 4 wallet types for a typical operator, then shows how the system grows:
+- Loyalty points wallet added for a marketing campaign
+- Regional roaming wallets (EU, APAC) added for market expansion
 
-Each wallet supports top-up (credit) and debit (charge) operations. Debits are guarded by a balance check.
+Final state: 7 wallet types, 49 definitions, all from 1 template.
 
-## Files
+## Subscriber Lifecycle
 
-| File | Description |
-|---|---|
-| `template.deql` | The reusable `wallet_aggregate` template |
-| `wallets.deql` | Instantiations for Main, Promo, Roaming, CorporatePool |
-| `projections.deql` | Read models for balance dashboard and transaction history |
-| `eventstore.deql` | Storage configuration |
-| `inspect.deql` | Tests covering top-ups, debits, guards, and projections |
+The demo walks through realistic subscriber scenarios:
+- Alice (SUB-001): top-up → voice call → data pack → promo SMS
+- Bob (SUB-002): enterprise user with roaming across EU and APAC
+- CORP-001: shared corporate pool with employee charges
 
 ## Running
+
+```bash
+cargo run -- -f deql-lang/examples/telecom-wallet/demo.deql
+```
+
+## Concepts Covered
+
+| Concept | What it does in this demo |
+|---|---|
+| TEMPLATE | `wallet_aggregate` — top-up/debit pattern with currency parameter |
+| APPLY TEMPLATE | 7 instantiations showing incremental product growth |
+| EXECUTE | Full subscriber lifecycle across Main, Promo, Roaming, CorporatePool, Loyalty, RoamingEU, RoamingAPAC |
+| DESCRIBE TEMPLATE | Shows all 7 instances with their parameters |
+| INSPECT | Simulated batch campaign top-ups |
+| VALIDATE / EXPORT | Consistency check and reproducible output |
