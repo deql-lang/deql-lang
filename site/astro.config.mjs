@@ -67,9 +67,39 @@ export default defineConfig({
 				{
 					label: 'Examples',
 					items: [
-						{ label: 'Inventory System', slug: 'examples/inventory-system' },
-						{ label: 'Registry System', slug: 'examples/registry-system' },
-						{ label: 'Telecom Wallet', slug: 'examples/telecom-wallet' },
+						{ label: 'Beyond Aggregates', slug: 'examples/beyond-aggregates' },
+						{
+							label: 'Getting Started',
+							items: [
+								{ label: 'Employee Domain', slug: 'examples/demoscript' },
+							],
+						},
+						{
+							label: 'Decision Patterns',
+							items: [
+								{ label: 'Approval Workflow', slug: 'examples/approval-workflow' },
+								{ label: 'Order Fulfillment', slug: 'examples/order-fulfillment' },
+								{ label: 'Idempotent Payments', slug: 'examples/idempotent-payments' },
+								{ label: 'Subscription Billing', slug: 'examples/subscription-billing' },
+							],
+						},
+						{
+							label: 'Inspection',
+							items: [
+								{ label: 'Inspect Decisions', slug: 'examples/inspect-demo' },
+								{ label: 'Inspect Projections', slug: 'examples/inspect-projection' },
+								{ label: 'Describe & Validate', slug: 'examples/describe-and-validate' },
+							],
+						},
+						{
+							label: 'Full Systems',
+							items: [
+								{ label: 'Audit Trail', slug: 'examples/audit-trail' },
+								{ label: 'Inventory System', slug: 'examples/inventory-system' },
+								{ label: 'Registry System', slug: 'examples/registry-system' },
+								{ label: 'Telecom Wallet', slug: 'examples/telecom-wallet' },
+							],
+						},
 					],
 				},
 			],

@@ -1,0 +1,202 @@
+-- Shopping Cart with Coupons — Cross-Aggregate Decisions
+--
+-- Challenge: In traditional CQRS-ES, adding coupons to a shopping cart
+-- requires coordinating two aggregates (Cart and Coupon). This typically
+-- means workflow orchestration, saga patterns, compensation mechanisms,
+-- and recovery logic — all to answer one simple question:
+-- "Is this coupon still available?"
+--
+-- In DeQL, a decision can query state from MULTIPLE aggregates in its
+-- STATE AS clause. No sagas. No two-phase commits. No compensation.
+-- Just a guarded decision that checks both aggregates atomically.
+
+-- ============================================================
+-- Step 1: Define the Shopping Cart aggregate
+-- ============================================================
+
+CREATE AGGREGATE Cart;
+
+CREATE COMMAND AddItem (
+  cart_id    STRING,
+  product_id STRING,
+  quantity   INT,
+  price      DECIMAL
+);
+
+CREATE COMMAND Checkout (
+  cart_id STRING
+);
+
+CREATE EVENT ItemAdded (
+  product_id STRING,
+  quantity   INT,
+  price      DECIMAL
+);
+
+CREATE EVENT CheckedOut ();
+
+-- Adding items is unconditional.
+CREATE DECISION AddItem
+FOR Cart
+ON COMMAND AddItem
+EMIT AS
+  SELECT EVENT ItemAdded (
+    product_id := :product_id,
+    quantity   := :quantity,
+    price      := :price
+  );
+
+-- Checkout is allowed only if the cart has items and hasn't been checked out.
+CREATE DECISION Checkout
+FOR Cart
+ON COMMAND Checkout
+STATE AS
+  SELECT
+    COUNT(*) FILTER (WHERE event_type = 'ItemAdded') AS item_count,
+    COUNT(*) FILTER (WHERE event_type = 'CheckedOut') AS checkout_count
+  FROM DeReg."Cart$Events"
+  WHERE stream_id = :cart_id
+EMIT AS
+  SELECT EVENT CheckedOut ()
+  WHERE item_count > 0 AND checkout_count = 0;
+
+-- ============================================================
+-- Step 2: The challenge — adding coupons
+--
+-- A coupon has a limited quantity. When a customer applies a coupon,
+-- we need to check:
+--   1. The coupon exists and has remaining quantity (Coupon aggregate)
+--   2. The cart doesn't already have a coupon applied (Cart aggregate)
+--
+-- In traditional systems, this requires:
+--   - A saga or process manager to coordinate Cart and Coupon
+--   - Compensation logic if one step fails
+--   - Recovery mechanisms for crashes mid-workflow
+--   - Two-phase commit or eventual consistency trade-offs
+--
+-- In DeQL, it's just a decision with a cross-aggregate STATE AS.
+-- ============================================================
+
+CREATE AGGREGATE Coupon;
+
+CREATE COMMAND EmitCoupon (
+  coupon_id STRING,
+  quantity  INT
+);
+
+CREATE COMMAND ApplyCoupon (
+  cart_id   STRING,
+  coupon_id STRING
+);
+
+CREATE EVENT CouponEmitted (
+  quantity INT
+);
+
+CREATE EVENT CouponApplied (
+  cart_id STRING
+);
+
+-- Emitting coupons is unconditional (admin action).
+CREATE DECISION EmitCoupon
+FOR Coupon
+ON COMMAND EmitCoupon
+EMIT AS
+  SELECT EVENT CouponEmitted (
+    quantity := :quantity
+  );
+
+-- ============================================================
+-- Step 3: The cross-aggregate decision
+--
+-- ApplyCoupon queries BOTH aggregates:
+--   - Coupon aggregate: how many coupons remain?
+--   - Cart aggregate: has a coupon already been applied?
+--
+-- If both guards pass, a CouponApplied event is emitted on the
+-- Coupon aggregate's stream. No saga. No compensation.
+-- ============================================================
+
+CREATE DECISION ApplyCoupon
+FOR Coupon
+ON COMMAND ApplyCoupon
+STATE AS
+  SELECT
+    COALESCE(SUM(
+      CASE
+        WHEN event_type = 'CouponEmitted' THEN data.quantity
+        WHEN event_type = 'CouponApplied' THEN -1
+        ELSE 0
+      END
+    ), 0) AS remaining_quantity,
+    (
+      SELECT COUNT(*)
+      FROM DeReg."Coupon$Events"
+      WHERE stream_id = :coupon_id
+        AND event_type = 'CouponApplied'
+        AND data.cart_id = :cart_id
+    ) AS already_applied_to_cart
+  FROM DeReg."Coupon$Events"
+  WHERE stream_id = :coupon_id
+EMIT AS
+  SELECT EVENT CouponApplied (
+    cart_id := :cart_id
+  )
+  WHERE remaining_quantity > 0 AND already_applied_to_cart = 0;
+
+-- ============================================================
+-- Step 4: Projections
+-- ============================================================
+
+CREATE PROJECTION CouponAvailability AS
+SELECT
+  stream_id AS coupon_id,
+  COALESCE(SUM(
+    CASE
+      WHEN event_type = 'CouponEmitted' THEN data.quantity
+      WHEN event_type = 'CouponApplied' THEN -1
+      ELSE 0
+    END
+  ), 0) AS remaining
+FROM DeReg."Coupon$Events"
+GROUP BY stream_id;
+
+CREATE PROJECTION CartSummary AS
+SELECT
+  stream_id AS cart_id,
+  COUNT(*) FILTER (WHERE event_type = 'ItemAdded') AS item_count,
+  LAST(event_type) AS status
+FROM DeReg."Cart$Events"
+GROUP BY stream_id;
+
+-- ============================================================
+-- Step 5: Run the story
+-- ============================================================
+
+-- Admin emits 3 coupons for a summer sale
+EXECUTE EmitCoupon(coupon_id := 'SUMMER-2026', quantity := 3);
+
+-- Alice builds her cart
+EXECUTE AddItem(cart_id := 'CART-ALICE', product_id := 'WIDGET-A', quantity := 2, price := 25.00);
+EXECUTE AddItem(cart_id := 'CART-ALICE', product_id := 'GADGET-B', quantity := 1, price := 75.00);
+
+-- Alice applies the coupon — should succeed (3 remaining, not yet applied)
+EXECUTE ApplyCoupon(cart_id := 'CART-ALICE', coupon_id := 'SUMMER-2026');
+
+-- Alice tries to apply the same coupon again — rejected (already applied to this cart)
+EXECUTE ApplyCoupon(cart_id := 'CART-ALICE', coupon_id := 'SUMMER-2026');
+
+-- Bob applies the same coupon — should succeed (2 remaining, not applied to Bob's cart)
+EXECUTE ApplyCoupon(cart_id := 'CART-BOB', coupon_id := 'SUMMER-2026');
+
+-- Carol applies it too — should succeed (1 remaining)
+EXECUTE ApplyCoupon(cart_id := 'CART-CAROL', coupon_id := 'SUMMER-2026');
+
+-- Dave tries — rejected (0 remaining)
+EXECUTE ApplyCoupon(cart_id := 'CART-DAVE', coupon_id := 'SUMMER-2026');
+
+-- Check coupon availability
+SELECT * FROM DeReg."CouponAvailability";
+
+-- Check cart summaries
+SELECT * FROM DeReg."CartSummary";

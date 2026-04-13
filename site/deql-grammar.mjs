@@ -15,6 +15,8 @@ export default {
     { include: '#deql-assign' },
     { include: '#deql-bind-params' },
     { include: '#deql-identifiers' },
+    { include: '#deql-success-mark' },
+    { include: '#deql-failure-mark' },
     { include: '#deql-keywords' },
     { include: '#sql-keywords' },
     { include: '#deql-functions' },
@@ -55,6 +57,14 @@ export default {
     'deql-assign': {
       match: ':=',
       name: 'keyword.operator.assignment.deql',
+    },
+    'deql-success-mark': {
+      match: '✓',
+      name: 'markup.inserted.deql',
+    },
+    'deql-failure-mark': {
+      match: '✗',
+      name: 'markup.deleted.deql',
     },
   },
 };

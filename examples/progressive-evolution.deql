@@ -1,0 +1,125 @@
+-- Progressive Evolution — Start Small, Grow Safely
+-- Demonstrates building a system incrementally:
+-- Step 1: Minimal aggregate with one command
+-- Step 2: Add a guard
+-- Step 3: Add a second command
+-- Step 4: Add projections
+-- Each step builds on the previous without breaking anything.
+
+-- ============================================================
+-- Step 1: The simplest possible system
+-- One aggregate, one command, one event, one decision.
+-- ============================================================
+
+CREATE AGGREGATE Task;
+
+CREATE COMMAND CreateTask (
+  task_id STRING,
+  title   STRING
+);
+
+CREATE EVENT TaskCreated (
+  title STRING
+);
+
+CREATE DECISION CreateTask
+FOR Task
+ON COMMAND CreateTask
+EMIT AS
+  SELECT EVENT TaskCreated (
+    title := :title
+  );
+
+-- That's it. A working event-sourced system.
+EXECUTE CreateTask(task_id := 'T-001', title := 'Write docs');
+EXECUTE CreateTask(task_id := 'T-002', title := 'Review PR');
+
+-- ============================================================
+-- Step 2: Add a guarded command — complete a task
+-- Can only complete a task that exists and isn't already completed.
+-- ============================================================
+
+CREATE COMMAND CompleteTask (
+  task_id STRING
+);
+
+CREATE EVENT TaskCompleted ();
+
+CREATE DECISION CompleteTask
+FOR Task
+ON COMMAND CompleteTask
+STATE AS
+  SELECT
+    LAST(event_type) AS current_status
+  FROM DeReg."Task$Events"
+  WHERE stream_id = :task_id
+EMIT AS
+  SELECT EVENT TaskCompleted ()
+  WHERE current_status = 'TaskCreated';
+
+EXECUTE CompleteTask(task_id := 'T-001');
+
+-- Try completing again — guard rejects it
+EXECUTE CompleteTask(task_id := 'T-001');
+-- ✗ Rejected — current_status is 'TaskCompleted'
+
+-- ============================================================
+-- Step 3: Add another command — reopen a completed task
+-- ============================================================
+
+CREATE COMMAND ReopenTask (
+  task_id STRING,
+  reason  STRING
+);
+
+CREATE EVENT TaskReopened (
+  reason STRING
+);
+
+CREATE DECISION ReopenTask
+FOR Task
+ON COMMAND ReopenTask
+STATE AS
+  SELECT
+    LAST(event_type) AS current_status
+  FROM DeReg."Task$Events"
+  WHERE stream_id = :task_id
+EMIT AS
+  SELECT EVENT TaskReopened (
+    reason := :reason
+  )
+  WHERE current_status = 'TaskCompleted';
+
+EXECUTE ReopenTask(task_id := 'T-001', reason := 'Found a bug');
+
+-- Now T-001 can be completed again
+EXECUTE CompleteTask(task_id := 'T-001');
+
+-- ============================================================
+-- Step 4: Add projections — read models over the same events
+-- ============================================================
+
+CREATE PROJECTION TaskBoard AS
+SELECT
+  stream_id AS task_id,
+  LAST(data.title) AS title,
+  LAST(event_type) AS status
+FROM DeReg."Task$Events"
+GROUP BY stream_id;
+
+CREATE PROJECTION CompletionLog AS
+SELECT
+  stream_id AS task_id,
+  seq,
+  event_type,
+  occurred_at
+FROM DeReg."Task$Events"
+WHERE event_type IN ('TaskCompleted', 'TaskReopened')
+ORDER BY stream_id, seq;
+
+SELECT * FROM DeReg."TaskBoard";
+SELECT * FROM DeReg."CompletionLog";
+
+-- The system grew from 4 statements to a full lifecycle
+-- with guards, reopening, and two projections.
+-- No refactoring. No breaking changes. Progressive evolution.

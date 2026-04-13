@@ -1,0 +1,126 @@
+-- Audit Trail — Projection-Focused Demo
+-- A minimal domain with multiple projections showing how
+-- the same event stream can power very different read models.
+
+CREATE AGGREGATE Document;
+
+-- Commands
+
+CREATE COMMAND CreateDocument (
+  doc_id    STRING,
+  author_id STRING,
+  title     STRING
+);
+
+CREATE COMMAND EditDocument (
+  doc_id    STRING,
+  editor_id STRING,
+  summary   STRING
+);
+
+CREATE COMMAND PublishDocument (
+  doc_id       STRING,
+  publisher_id STRING
+);
+
+-- Events
+
+CREATE EVENT DocumentCreated (
+  author_id STRING,
+  title     STRING
+);
+
+CREATE EVENT DocumentEdited (
+  editor_id STRING,
+  summary   STRING
+);
+
+CREATE EVENT DocumentPublished (
+  publisher_id STRING
+);
+
+-- Decisions (all unconditional for simplicity — focus is on projections)
+
+CREATE DECISION CreateDocument
+FOR Document
+ON COMMAND CreateDocument
+EMIT AS
+  SELECT EVENT DocumentCreated (
+    author_id := :author_id,
+    title     := :title
+  );
+
+CREATE DECISION EditDocument
+FOR Document
+ON COMMAND EditDocument
+EMIT AS
+  SELECT EVENT DocumentEdited (
+    editor_id := :editor_id,
+    summary   := :summary
+  );
+
+CREATE DECISION PublishDocument
+FOR Document
+ON COMMAND PublishDocument
+EMIT AS
+  SELECT EVENT DocumentPublished (
+    publisher_id := :publisher_id
+  );
+
+-- Projections — four different views from the same events
+
+-- 1. Full timeline: every action on every document
+CREATE PROJECTION AuditTimeline AS
+SELECT
+  stream_id AS doc_id,
+  seq,
+  event_type AS action,
+  occurred_at
+FROM DeReg."Document$Events"
+ORDER BY occurred_at, seq;
+
+-- 2. Per-user activity: what did each person do?
+CREATE PROJECTION UserActivity AS
+SELECT
+  COALESCE(data.author_id, data.editor_id, data.publisher_id) AS user_id,
+  stream_id AS doc_id,
+  event_type AS action,
+  occurred_at
+FROM DeReg."Document$Events"
+ORDER BY user_id, occurred_at;
+
+-- 3. Document summary: latest state of each document
+CREATE PROJECTION DocumentSummary AS
+SELECT
+  stream_id AS doc_id,
+  LAST(data.title) AS title,
+  LAST(data.author_id) AS author,
+  COUNT(*) AS total_events,
+  LAST(event_type) AS last_action
+FROM DeReg."Document$Events"
+GROUP BY stream_id;
+
+-- 4. Edit count per document
+CREATE PROJECTION EditCounts AS
+SELECT
+  stream_id AS doc_id,
+  COUNT(*) AS edit_count
+FROM DeReg."Document$Events"
+WHERE event_type = 'DocumentEdited'
+GROUP BY stream_id;
+
+-- Run it
+
+EXECUTE CreateDocument(doc_id := 'DOC-001', author_id := 'USR-A', title := 'Architecture Overview');
+EXECUTE EditDocument(doc_id := 'DOC-001', editor_id := 'USR-B', summary := 'Added diagrams');
+EXECUTE EditDocument(doc_id := 'DOC-001', editor_id := 'USR-A', summary := 'Fixed typos');
+EXECUTE PublishDocument(doc_id := 'DOC-001', publisher_id := 'USR-A');
+
+EXECUTE CreateDocument(doc_id := 'DOC-002', author_id := 'USR-C', title := 'API Reference');
+EXECUTE EditDocument(doc_id := 'DOC-002', editor_id := 'USR-C', summary := 'Initial draft');
+
+-- Four projections, same events, different perspectives
+SELECT * FROM DeReg."AuditTimeline";
+SELECT * FROM DeReg."UserActivity";
+SELECT * FROM DeReg."DocumentSummary";
+SELECT * FROM DeReg."EditCounts";

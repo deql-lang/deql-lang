@@ -1,0 +1,104 @@
+-- Order Fulfillment — Multi-Aggregate Decisions
+-- Demonstrates a decision that queries state across two aggregates
+-- before emitting an event.
+
+-- Two aggregate boundaries: one for orders, one for inventory.
+
+CREATE AGGREGATE OrderBook;
+CREATE AGGREGATE Warehouse;
+
+-- Commands
+
+CREATE COMMAND PlaceOrder (
+  order_id   STRING,
+  product_id STRING,
+  quantity   INT
+);
+
+CREATE COMMAND ReceiveStock (
+  product_id STRING,
+  quantity   INT
+);
+
+-- Events
+
+CREATE EVENT OrderPlaced (
+  product_id STRING,
+  quantity   INT
+);
+
+CREATE EVENT OrderRejected (
+  product_id STRING,
+  quantity   INT,
+  reason     STRING
+);
+
+CREATE EVENT StockReceived (
+  quantity INT
+);
+
+-- Decisions
+
+-- Receiving stock is unconditional.
+CREATE DECISION ReceiveStock
+FOR Warehouse
+ON COMMAND ReceiveStock
+EMIT AS
+  SELECT EVENT StockReceived (
+    quantity := :quantity
+  );
+
+-- Placing an order checks available stock from the Warehouse aggregate.
+-- If stock is sufficient, the order is placed. Otherwise, it's rejected.
+CREATE DECISION PlaceOrder
+FOR OrderBook
+ON COMMAND PlaceOrder
+STATE AS
+  SELECT
+    COALESCE(SUM(data.quantity), 0) AS available_stock
+  FROM DeReg."Warehouse$Events"
+  WHERE stream_id = :product_id
+    AND event_type = 'StockReceived'
+EMIT AS
+  SELECT EVENT OrderPlaced (
+    product_id := :product_id,
+    quantity   := :quantity
+  )
+  WHERE available_stock >= :quantity;
+
+-- Projections
+
+CREATE PROJECTION StockLevels AS
+SELECT
+  stream_id AS product_id,
+  SUM(data.quantity) AS total_received
+FROM DeReg."Warehouse$Events"
+WHERE event_type = 'StockReceived'
+GROUP BY stream_id;
+
+CREATE PROJECTION OrderLog AS
+SELECT
+  stream_id AS order_id,
+  seq,
+  event_type,
+  data.product_id AS product_id,
+  data.quantity AS quantity
+FROM DeReg."OrderBook$Events"
+ORDER BY order_id, seq;
+
+-- Run it
+
+-- First, receive some stock
+EXECUTE ReceiveStock(product_id := 'PROD-A', quantity := 50);
+EXECUTE ReceiveStock(product_id := 'PROD-A', quantity := 30);
+
+-- Place an order within stock limits
+EXECUTE PlaceOrder(order_id := 'ORD-001', product_id := 'PROD-A', quantity := 20);
+
+-- Place an order that exceeds available stock
+EXECUTE PlaceOrder(order_id := 'ORD-002', product_id := 'PROD-A', quantity := 200);
+-- ✗ Rejected — available_stock (80) < quantity (200)
+
+-- Check projections
+SELECT * FROM DeReg."StockLevels";
+SELECT * FROM DeReg."OrderLog";

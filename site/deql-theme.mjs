@@ -36,6 +36,16 @@ export default {
       settings: { foreground: '#C792EA' },
     },
     {
+      name: 'DeQL Success Mark (✓)',
+      scope: 'markup.inserted.deql',
+      settings: { foreground: '#22DA6E', fontStyle: 'bold' },
+    },
+    {
+      name: 'DeQL Failure Mark (✗)',
+      scope: 'markup.deleted.deql',
+      settings: { foreground: '#EF5350', fontStyle: 'bold' },
+    },
+    {
       name: 'DeQL Functions (LAST, FIRST, etc.)',
       scope: 'support.function.deql',
       settings: { foreground: '#82AAFF' },

@@ -1,0 +1,122 @@
+-- Inspect Projection Demo — Verify Read Models Without Side Effects
+--
+-- Story: A small e-commerce shop wants to validate that its
+-- reporting projections produce correct output BEFORE going live.
+-- The team uses INSPECT DECISION to simulate orders, then
+-- INSPECT PROJECTION to verify the read models — all without
+-- writing a single real event.
+
+-- ============================================================
+-- Step 1: Define the domain
+-- ============================================================
+
+CREATE AGGREGATE Shop;
+
+CREATE COMMAND PlaceOrder (
+  order_id    STRING,
+  customer_id STRING,
+  product     STRING,
+  quantity    INT,
+  unit_price  DECIMAL
+);
+
+CREATE COMMAND CancelOrder (
+  order_id STRING,
+  reason   STRING
+);
+
+CREATE EVENT OrderPlaced (
+  customer_id STRING,
+  product     STRING,
+  quantity    INT,
+  unit_price  DECIMAL
+);
+
+CREATE EVENT OrderCancelled (
+  reason STRING
+);
+
+-- Placing an order is unconditional.
+CREATE DECISION PlaceOrder
+FOR Shop
+ON COMMAND PlaceOrder
+EMIT AS
+  SELECT EVENT OrderPlaced (
+    customer_id := :customer_id,
+    product     := :product,
+    quantity    := :quantity,
+    unit_price  := :unit_price
+  );
+
+-- Cancellation requires the order to exist and not already be cancelled.
+CREATE DECISION CancelOrder
+FOR Shop
+ON COMMAND CancelOrder
+STATE AS
+  SELECT
+    LAST(event_type) AS current_status
+  FROM DeReg."Shop$Events"
+  WHERE stream_id = :order_id
+EMIT AS
+  SELECT EVENT OrderCancelled (
+    reason := :reason
+  )
+  WHERE current_status = 'OrderPlaced';
+
+-- ============================================================
+-- Step 2: Define projections (the read models we want to verify)
+-- ============================================================
+
+-- Revenue by product
+CREATE PROJECTION RevenueByProduct AS
+SELECT
+  data.product AS product,
+  SUM(data.quantity) AS total_units,
+  SUM(data.quantity * data.unit_price) AS total_revenue
+FROM DeReg."Shop$Events"
+WHERE event_type = 'OrderPlaced'
+GROUP BY data.product;
+
+-- Orders per customer
+CREATE PROJECTION CustomerOrders AS
+SELECT
+  data.customer_id AS customer_id,
+  COUNT(*) AS order_count,
+  SUM(data.quantity * data.unit_price) AS total_spent
+FROM DeReg."Shop$Events"
+WHERE event_type = 'OrderPlaced'
+GROUP BY data.customer_id;
+
+-- ============================================================
+-- Step 3: Place real orders to build up state
+-- ============================================================
+
+EXECUTE PlaceOrder(order_id := 'ORD-001', customer_id := 'CUST-A', product := 'Widget', quantity := 3, unit_price := 25.00);
+EXECUTE PlaceOrder(order_id := 'ORD-002', customer_id := 'CUST-B', product := 'Gadget', quantity := 1, unit_price := 150.00);
+EXECUTE PlaceOrder(order_id := 'ORD-003', customer_id := 'CUST-A', product := 'Widget', quantity := 2, unit_price := 25.00);
+EXECUTE PlaceOrder(order_id := 'ORD-004', customer_id := 'CUST-C', product := 'Gadget', quantity := 5, unit_price := 150.00);
+
+-- Verify the real projections reflect these orders
+SELECT * FROM DeReg."RevenueByProduct";
+SELECT * FROM DeReg."CustomerOrders";
+
+-- ============================================================
+-- Step 4: INSPECT PROJECTION — simulate the read model
+-- from the real event store, without updating the projection
+-- ============================================================
+
+INSPECT PROJECTION RevenueByProduct
+FROM DeReg."Shop$Events"
+INTO simulated_revenue;
+
+SELECT * FROM simulated_revenue;
+
+INSPECT PROJECTION CustomerOrders
+FROM DeReg."Shop$Events"
+INTO simulated_customers;
+
+SELECT * FROM simulated_customers;
+
+-- The simulated tables match the real projections.
+-- This is useful for validating projection logic changes
+-- before deploying them.

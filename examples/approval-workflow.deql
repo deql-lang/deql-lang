@@ -1,0 +1,153 @@
+-- Approval Workflow — State Machine with Multiple Transitions
+-- Demonstrates guarded decisions that enforce valid state transitions.
+-- An expense request moves through: Draft → Submitted → Approved/Rejected
+-- with guards preventing invalid transitions.
+
+CREATE AGGREGATE ExpenseRequest;
+
+-- Commands
+
+CREATE COMMAND SubmitExpense (
+  request_id  STRING,
+  employee_id STRING,
+  amount      DECIMAL,
+  description STRING
+);
+
+CREATE COMMAND ApproveExpense (
+  request_id  STRING,
+  approver_id STRING
+);
+
+CREATE COMMAND RejectExpense (
+  request_id  STRING,
+  approver_id STRING,
+  reason      STRING
+);
+
+CREATE COMMAND CancelExpense (
+  request_id STRING
+);
+
+-- Events
+
+CREATE EVENT ExpenseSubmitted (
+  employee_id STRING,
+  amount      DECIMAL,
+  description STRING
+);
+
+CREATE EVENT ExpenseApproved (
+  approver_id STRING
+);
+
+CREATE EVENT ExpenseRejected (
+  approver_id STRING,
+  reason      STRING
+);
+
+CREATE EVENT ExpenseCancelled ();
+
+-- Decisions
+
+-- Submitting is unconditional (creates the request).
+CREATE DECISION SubmitExpense
+FOR ExpenseRequest
+ON COMMAND SubmitExpense
+EMIT AS
+  SELECT EVENT ExpenseSubmitted (
+    employee_id := :employee_id,
+    amount      := :amount,
+    description := :description
+  );
+
+-- Approval requires the request to be in 'Submitted' state.
+CREATE DECISION ApproveExpense
+FOR ExpenseRequest
+ON COMMAND ApproveExpense
+STATE AS
+  SELECT
+    LAST(event_type) AS current_status
+  FROM DeReg."ExpenseRequest$Events"
+  WHERE stream_id = :request_id
+EMIT AS
+  SELECT EVENT ExpenseApproved (
+    approver_id := :approver_id
+  )
+  WHERE current_status = 'ExpenseSubmitted';
+
+-- Rejection also requires 'Submitted' state.
+CREATE DECISION RejectExpense
+FOR ExpenseRequest
+ON COMMAND RejectExpense
+STATE AS
+  SELECT
+    LAST(event_type) AS current_status
+  FROM DeReg."ExpenseRequest$Events"
+  WHERE stream_id = :request_id
+EMIT AS
+  SELECT EVENT ExpenseRejected (
+    approver_id := :approver_id,
+    reason      := :reason
+  )
+  WHERE current_status = 'ExpenseSubmitted';
+
+-- Cancellation is allowed only from 'Submitted' state (not after approval/rejection).
+CREATE DECISION CancelExpense
+FOR ExpenseRequest
+ON COMMAND CancelExpense
+STATE AS
+  SELECT
+    LAST(event_type) AS current_status
+  FROM DeReg."ExpenseRequest$Events"
+  WHERE stream_id = :request_id
+EMIT AS
+  SELECT EVENT ExpenseCancelled ()
+  WHERE current_status = 'ExpenseSubmitted';
+
+-- Projections
+
+CREATE PROJECTION PendingApprovals AS
+SELECT
+  stream_id AS request_id,
+  LAST(data.employee_id) AS employee_id,
+  LAST(data.amount) AS amount,
+  LAST(data.description) AS description
+FROM DeReg."ExpenseRequest$Events"
+WHERE event_type = 'ExpenseSubmitted'
+  AND stream_id NOT IN (
+    SELECT stream_id FROM DeReg."ExpenseRequest$Events"
+    WHERE event_type IN ('ExpenseApproved', 'ExpenseRejected', 'ExpenseCancelled')
+  )
+GROUP BY stream_id;
+
+CREATE PROJECTION ExpenseHistory AS
+SELECT
+  stream_id AS request_id,
+  seq,
+  event_type,
+  occurred_at
+FROM DeReg."ExpenseRequest$Events"
+ORDER BY request_id, seq;
+
+-- Run it
+
+EXECUTE SubmitExpense(request_id := 'EXP-001', employee_id := 'EMP-042', amount := 350.00, description := 'Conference travel');
+EXECUTE SubmitExpense(request_id := 'EXP-002', employee_id := 'EMP-007', amount := 75.00, description := 'Team lunch');
+
+-- Approve one
+EXECUTE ApproveExpense(request_id := 'EXP-001', approver_id := 'MGR-001');
+
+-- Try to approve again — should be rejected (already approved)
+EXECUTE ApproveExpense(request_id := 'EXP-001', approver_id := 'MGR-002');
+-- ✗ Rejected — current_status is 'ExpenseApproved', not 'ExpenseSubmitted'
+
+-- Reject the other
+EXECUTE RejectExpense(request_id := 'EXP-002', approver_id := 'MGR-001', reason := 'Budget exceeded');
+
+-- Try to cancel a rejected request — should fail
+EXECUTE CancelExpense(request_id := 'EXP-002');
+-- ✗ Rejected — current_status is 'ExpenseRejected'
+
+SELECT * FROM DeReg."PendingApprovals";
+SELECT * FROM DeReg."ExpenseHistory";

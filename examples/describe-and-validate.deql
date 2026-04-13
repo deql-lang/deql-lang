@@ -1,0 +1,100 @@
+-- Describe and Validate — DeReg Introspection
+-- Demonstrates using DESCRIBE, VALIDATE DEREG, and EXPORT DEREG
+-- to inspect and verify a system's definitions.
+
+CREATE AGGREGATE Ticket;
+
+CREATE COMMAND OpenTicket (
+  ticket_id   STRING,
+  reporter_id STRING,
+  summary     STRING,
+  priority    STRING
+);
+
+CREATE COMMAND CloseTicket (
+  ticket_id   STRING,
+  resolver_id STRING,
+  resolution  STRING
+);
+
+CREATE EVENT TicketOpened (
+  reporter_id STRING,
+  summary     STRING,
+  priority    STRING
+);
+
+CREATE EVENT TicketClosed (
+  resolver_id STRING,
+  resolution  STRING
+);
+
+CREATE DECISION OpenTicket
+FOR Ticket
+ON COMMAND OpenTicket
+EMIT AS
+  SELECT EVENT TicketOpened (
+    reporter_id := :reporter_id,
+    summary     := :summary,
+    priority    := :priority
+  );
+
+CREATE DECISION CloseTicket
+FOR Ticket
+ON COMMAND CloseTicket
+STATE AS
+  SELECT
+    LAST(event_type) AS current_status
+  FROM DeReg."Ticket$Events"
+  WHERE stream_id = :ticket_id
+EMIT AS
+  SELECT EVENT TicketClosed (
+    resolver_id := :resolver_id,
+    resolution  := :resolution
+  )
+  WHERE current_status = 'TicketOpened';
+
+CREATE PROJECTION OpenTickets AS
+SELECT
+  stream_id AS ticket_id,
+  LAST(data.reporter_id) AS reporter,
+  LAST(data.summary) AS summary,
+  LAST(data.priority) AS priority
+FROM DeReg."Ticket$Events"
+WHERE event_type = 'TicketOpened'
+  AND stream_id NOT IN (
+    SELECT stream_id FROM DeReg."Ticket$Events"
+    WHERE event_type = 'TicketClosed'
+  )
+GROUP BY stream_id;
+
+-- ============================================================
+-- DESCRIBE — inspect individual definitions
+-- ============================================================
+
+-- What does the Ticket aggregate look like?
+DESCRIBE AGGREGATE Ticket;
+
+-- What fields does OpenTicket expect?
+DESCRIBE COMMAND OpenTicket;
+
+-- What does the CloseTicket decision do?
+DESCRIBE DECISION CloseTicket;
+
+-- What does the OpenTickets projection produce?
+DESCRIBE PROJECTION OpenTickets;
+
+-- ============================================================
+-- VALIDATE DEREG — check system consistency
+-- ============================================================
+
+-- Are all commands handled by decisions?
+-- Are all events referenced by at least one decision?
+-- Are all aggregates used?
+VALIDATE DEREG;
+
+-- ============================================================
+-- EXPORT DEREG — dump the full system definition
+-- ============================================================
+
+-- Produces a complete, portable snapshot of every registered concept.
+EXPORT DEREG;

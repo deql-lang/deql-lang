@@ -1,0 +1,143 @@
+-- Inspect Demo — Validate Before You Ship
+-- Demonstrates INSPECT DECISION to simulate and verify
+-- decision behavior without writing real events.
+
+-- ============================================================
+-- Define a simple banking domain
+-- ============================================================
+
+CREATE AGGREGATE BankAccount;
+
+CREATE COMMAND OpenAccount (
+  account_id      STRING,
+  owner           STRING,
+  initial_balance DECIMAL
+);
+
+CREATE COMMAND DepositFunds (
+  account_id STRING,
+  amount     DECIMAL
+);
+
+CREATE COMMAND WithdrawFunds (
+  account_id STRING,
+  amount     DECIMAL
+);
+
+CREATE EVENT AccountOpened (
+  owner           STRING,
+  initial_balance DECIMAL
+);
+
+CREATE EVENT FundsDeposited (
+  amount DECIMAL
+);
+
+CREATE EVENT FundsWithdrawn (
+  amount DECIMAL
+);
+
+-- Opening and depositing are unconditional.
+CREATE DECISION OpenAccount
+FOR BankAccount
+ON COMMAND OpenAccount
+EMIT AS
+  SELECT EVENT AccountOpened (
+    owner           := :owner,
+    initial_balance := :initial_balance
+  );
+
+CREATE DECISION DepositFunds
+FOR BankAccount
+ON COMMAND DepositFunds
+EMIT AS
+  SELECT EVENT FundsDeposited (
+    amount := :amount
+  );
+
+-- Withdrawal is guarded — balance must be sufficient.
+CREATE DECISION WithdrawFunds
+FOR BankAccount
+ON COMMAND WithdrawFunds
+STATE AS
+  SELECT
+    COALESCE(SUM(
+      CASE
+        WHEN event_type = 'AccountOpened'  THEN data.initial_balance
+        WHEN event_type = 'FundsDeposited' THEN data.amount
+        WHEN event_type = 'FundsWithdrawn' THEN -data.amount
+        ELSE 0
+      END
+    ), 0) AS balance
+  FROM DeReg."BankAccount$Events"
+  WHERE stream_id = :account_id
+EMIT AS
+  SELECT EVENT FundsWithdrawn (
+    amount := :amount
+  )
+  WHERE balance >= :amount;
+
+CREATE PROJECTION AccountBalances AS
+SELECT
+  stream_id AS account_id,
+  LAST(data.owner) AS owner
+FROM DeReg."BankAccount$Events"
+WHERE event_type = 'AccountOpened'
+GROUP BY stream_id;
+
+-- ============================================================
+-- INSPECT DECISION — simulate account opens
+-- No events are persisted. No streams are touched.
+-- ============================================================
+
+CREATE TABLE test_opens AS VALUES
+  ('ACC-001', 'Alice', 500.00),
+  ('ACC-002', 'Bob',   200.00),
+  ('ACC-003', 'Carol', 1000.00);
+
+INSPECT DECISION OpenAccount
+FROM test_opens
+INTO simulated_open_events;
+
+-- Review what would have happened
+SELECT stream_id, event_type, data FROM simulated_open_events;
+
+-- ============================================================
+-- INSPECT DECISION — simulate deposits
+-- ============================================================
+
+CREATE TABLE test_deposits AS VALUES
+  ('ACC-001', 150.00),
+  ('ACC-002', 50.00);
+
+INSPECT DECISION DepositFunds
+FROM test_deposits
+INTO simulated_deposit_events;
+
+SELECT stream_id, event_type, data FROM simulated_deposit_events;
+
+-- ============================================================
+-- INSPECT DECISION — simulate withdrawals (some should fail)
+-- These run against the REAL event store, which is empty
+-- since INSPECT doesn't persist events.
+-- ============================================================
+
+-- First, let's actually open accounts so withdrawals have state to check
+EXECUTE OpenAccount(account_id := 'ACC-100', owner := 'Dave', initial_balance := 300.00);
+EXECUTE DepositFunds(account_id := 'ACC-100', amount := 200.00);
+
+-- Now simulate withdrawals against ACC-100 (balance = 500)
+CREATE TABLE test_withdrawals AS VALUES
+  ('ACC-100', 100.00),
+  ('ACC-100', 600.00);
+
+INSPECT DECISION WithdrawFunds
+FROM test_withdrawals
+INTO simulated_withdrawals;
+
+-- First should succeed (500 >= 100), second should be rejected (500 < 600)
+SELECT stream_id, event_type, data FROM simulated_withdrawals;
+
+-- The real balance is unchanged — INSPECT didn't write anything.
+-- Verify by querying the real projection:
+SELECT * FROM DeReg."AccountBalances";

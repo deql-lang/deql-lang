@@ -1,0 +1,100 @@
+-- Idempotent Payments — Duplicate Detection at the Decision Level
+-- Demonstrates using STATE AS to check for existing events
+-- before emitting, ensuring the same payment reference
+-- is never processed twice.
+
+CREATE AGGREGATE PaymentLedger;
+
+-- Commands
+
+CREATE COMMAND ProcessPayment (
+  payment_ref STRING,
+  payer_id    STRING,
+  amount      DECIMAL,
+  currency    STRING
+);
+
+CREATE COMMAND RefundPayment (
+  payment_ref STRING,
+  reason      STRING
+);
+
+-- Events
+
+CREATE EVENT PaymentProcessed (
+  payer_id STRING,
+  amount   DECIMAL,
+  currency STRING
+);
+
+CREATE EVENT PaymentRefunded (
+  reason STRING
+);
+
+-- Decisions
+
+-- Process a payment only if no event exists for this payment_ref yet.
+-- The payment_ref is used as the stream_id, so duplicate commands
+-- with the same ref are naturally idempotent.
+CREATE DECISION ProcessPayment
+FOR PaymentLedger
+ON COMMAND ProcessPayment
+STATE AS
+  SELECT
+    COUNT(*) AS event_count
+  FROM DeReg."PaymentLedger$Events"
+  WHERE stream_id = :payment_ref
+    AND event_type = 'PaymentProcessed'
+EMIT AS
+  SELECT EVENT PaymentProcessed (
+    payer_id := :payer_id,
+    amount   := :amount,
+    currency := :currency
+  )
+  WHERE event_count = 0;
+
+-- Refund is allowed only if the payment was processed and not already refunded.
+CREATE DECISION RefundPayment
+FOR PaymentLedger
+ON COMMAND RefundPayment
+STATE AS
+  SELECT
+    COUNT(*) FILTER (WHERE event_type = 'PaymentProcessed') AS processed_count,
+    COUNT(*) FILTER (WHERE event_type = 'PaymentRefunded')  AS refunded_count
+  FROM DeReg."PaymentLedger$Events"
+  WHERE stream_id = :payment_ref
+EMIT AS
+  SELECT EVENT PaymentRefunded (
+    reason := :reason
+  )
+  WHERE processed_count > 0 AND refunded_count = 0;
+
+-- Projections
+
+CREATE PROJECTION PaymentStatus AS
+SELECT
+  stream_id AS payment_ref,
+  LAST(event_type) AS status,
+  LAST(data.payer_id) AS payer_id,
+  LAST(data.amount) AS amount,
+  LAST(data.currency) AS currency
+FROM DeReg."PaymentLedger$Events"
+GROUP BY stream_id;
+
+-- Run it
+
+-- Process a payment
+EXECUTE ProcessPayment(payment_ref := 'PAY-001', payer_id := 'CUST-10', amount := 99.99, currency := 'USD');
+
+-- Send the exact same command again (idempotent — should be rejected)
+EXECUTE ProcessPayment(payment_ref := 'PAY-001', payer_id := 'CUST-10', amount := 99.99, currency := 'USD');
+-- ✗ Rejected — event_count > 0, payment already processed
+
+-- Refund it
+EXECUTE RefundPayment(payment_ref := 'PAY-001', reason := 'Customer request');
+
+-- Try to refund again (already refunded)
+EXECUTE RefundPayment(payment_ref := 'PAY-001', reason := 'Duplicate refund attempt');
+-- ✗ Rejected — refunded_count > 0
+
+SELECT * FROM DeReg."PaymentStatus";

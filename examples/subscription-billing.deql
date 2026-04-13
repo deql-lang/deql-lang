@@ -1,0 +1,150 @@
+-- Subscription Billing — Computed State and Lifecycle Guards
+-- Demonstrates decisions that derive state from event history
+-- and use guards to enforce lifecycle rules.
+
+CREATE AGGREGATE Subscription;
+
+-- Commands
+
+CREATE COMMAND Subscribe (
+  subscription_id STRING,
+  customer_id     STRING,
+  plan            STRING,
+  monthly_rate    DECIMAL
+);
+
+CREATE COMMAND RenewSubscription (
+  subscription_id STRING
+);
+
+CREATE COMMAND CancelSubscription (
+  subscription_id STRING,
+  reason          STRING
+);
+
+CREATE COMMAND SuspendSubscription (
+  subscription_id STRING,
+  reason          STRING
+);
+
+-- Events
+
+CREATE EVENT SubscriptionStarted (
+  customer_id  STRING,
+  plan         STRING,
+  monthly_rate DECIMAL
+);
+
+CREATE EVENT SubscriptionRenewed ();
+
+CREATE EVENT SubscriptionCancelled (
+  reason STRING
+);
+
+CREATE EVENT SubscriptionSuspended (
+  reason STRING
+);
+
+-- Decisions
+
+-- Starting a subscription is unconditional.
+CREATE DECISION Subscribe
+FOR Subscription
+ON COMMAND Subscribe
+EMIT AS
+  SELECT EVENT SubscriptionStarted (
+    customer_id  := :customer_id,
+    plan         := :plan,
+    monthly_rate := :monthly_rate
+  );
+
+-- Renewal is only allowed if the subscription is active
+-- (last event is Started or Renewed, not Cancelled or Suspended).
+CREATE DECISION RenewSubscription
+FOR Subscription
+ON COMMAND RenewSubscription
+STATE AS
+  SELECT
+    LAST(event_type) AS current_status
+  FROM DeReg."Subscription$Events"
+  WHERE stream_id = :subscription_id
+EMIT AS
+  SELECT EVENT SubscriptionRenewed ()
+  WHERE current_status IN ('SubscriptionStarted', 'SubscriptionRenewed');
+
+-- Cancellation is allowed from active or suspended state, but not if already cancelled.
+CREATE DECISION CancelSubscription
+FOR Subscription
+ON COMMAND CancelSubscription
+STATE AS
+  SELECT
+    LAST(event_type) AS current_status
+  FROM DeReg."Subscription$Events"
+  WHERE stream_id = :subscription_id
+EMIT AS
+  SELECT EVENT SubscriptionCancelled (
+    reason := :reason
+  )
+  WHERE current_status IN ('SubscriptionStarted', 'SubscriptionRenewed', 'SubscriptionSuspended');
+
+-- Suspension is only allowed from active state.
+CREATE DECISION SuspendSubscription
+FOR Subscription
+ON COMMAND SuspendSubscription
+STATE AS
+  SELECT
+    LAST(event_type) AS current_status
+  FROM DeReg."Subscription$Events"
+  WHERE stream_id = :subscription_id
+EMIT AS
+  SELECT EVENT SubscriptionSuspended (
+    reason := :reason
+  )
+  WHERE current_status IN ('SubscriptionStarted', 'SubscriptionRenewed');
+
+-- Projections
+
+CREATE PROJECTION ActiveSubscriptions AS
+SELECT
+  stream_id AS subscription_id,
+  LAST(data.customer_id) AS customer_id,
+  LAST(data.plan) AS plan,
+  LAST(data.monthly_rate) AS monthly_rate,
+  LAST(event_type) AS status,
+  COUNT(*) FILTER (WHERE event_type = 'SubscriptionRenewed') AS renewal_count
+FROM DeReg."Subscription$Events"
+GROUP BY stream_id;
+
+CREATE PROJECTION RevenueReport AS
+SELECT
+  LAST(data.plan) AS plan,
+  COUNT(DISTINCT stream_id) AS subscriber_count,
+  SUM(data.monthly_rate) AS total_monthly_revenue
+FROM DeReg."Subscription$Events"
+WHERE event_type = 'SubscriptionStarted'
+GROUP BY data.plan;
+
+-- Run it
+
+EXECUTE Subscribe(subscription_id := 'SUB-001', customer_id := 'CUST-A', plan := 'Pro', monthly_rate := 29.99);
+EXECUTE Subscribe(subscription_id := 'SUB-002', customer_id := 'CUST-B', plan := 'Basic', monthly_rate := 9.99);
+
+-- Renew one
+EXECUTE RenewSubscription(subscription_id := 'SUB-001');
+
+-- Suspend the other
+EXECUTE SuspendSubscription(subscription_id := 'SUB-002', reason := 'Payment failed');
+
+-- Try to renew a suspended subscription — should fail
+EXECUTE RenewSubscription(subscription_id := 'SUB-002');
+-- ✗ Rejected — current_status is 'SubscriptionSuspended'
+
+-- Cancel the suspended one
+EXECUTE CancelSubscription(subscription_id := 'SUB-002', reason := 'Customer churned');
+
+-- Try to cancel again — should fail
+EXECUTE CancelSubscription(subscription_id := 'SUB-002', reason := 'Duplicate');
+-- ✗ Rejected — current_status is 'SubscriptionCancelled'
+
+SELECT * FROM DeReg."ActiveSubscriptions";
+SELECT * FROM DeReg."RevenueReport";
