@@ -34,21 +34,15 @@ EMIT AS
     name  := :name,
     grade := :grade
   );
-/* An employee should only be promoted when the new grade is different from their current grade. */
+/* An employee should only be promoted when the new grade is different from their current grade.
+   We use $Agg to query the current derived state instead of manually folding $Events. */
 CREATE DECISION Promote
 FOR Employee
 ON COMMAND PromoteEmployee
 STATE AS
-  SELECT
-    LAST(
-      CASE
-        WHEN event_type = 'EmployeeHired'     THEN data.grade
-        WHEN event_type = 'EmployeePromoted' THEN data.new_grade
-        ELSE NULL
-      END
-    ) AS current_grade
-  FROM DeReg."Employee$Events"
-  WHERE stream_id = :employee_id
+  SELECT COALESCE(new_grade, grade) AS current_grade
+  FROM DeReg."Employee$Agg"
+  WHERE aggregate_id = :employee_id
 EMIT AS
   SELECT EVENT EmployeePromoted (
     new_grade := :new_grade

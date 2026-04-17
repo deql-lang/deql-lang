@@ -9,6 +9,52 @@ A step-by-step introduction to DeQL using an Employee domain. Covers every core 
 
 An HR system that handles hiring and promotions. An employee can be hired unconditionally, but promotions are guarded — you can't promote someone to the same grade they already hold.
 
+## Runtime Behavior
+
+```mermaid
+flowchart LR
+  subgraph Commands
+    C1["HireEmployee"]
+    C2["PromoteEmployee"]
+  end
+
+  subgraph Decisions
+    D1["Hire"]
+    D2["Promote"]
+  end
+
+  subgraph "Employee Aggregate"
+    AGG["Employee$Agg\n(grade, new_grade)"]
+    EVT["Employee$Events"]
+  end
+
+  subgraph Events
+    E1["EmployeeHired"]
+    E2["EmployeePromoted"]
+  end
+
+  subgraph Projections
+    P1["NewHireReport"]
+    P2["PromotionsReport"]
+  end
+
+  C1 -->|"EXECUTE"| D1
+  C2 -->|"EXECUTE"| D2
+  D2 -.->|"STATE AS\nquery $Agg"| AGG
+  D1 -->|"EMIT"| E1
+  D2 -->|"EMIT or REJECT"| E2
+  E1 --> EVT
+  E2 --> EVT
+  EVT --> AGG
+  EVT --> P1
+  EVT --> P2
+```
+
+**Flow:**
+1. `HireEmployee` command → `Hire` decision → emits `EmployeeHired` (unconditional)
+2. `PromoteEmployee` command → `Promote` decision → queries `Employee$Agg` for `current_grade` → emits `EmployeePromoted` if grade differs, rejects otherwise
+3. Events flow into `Employee$Events`, which feeds both `Employee$Agg` (write-side state) and the projections (read-side reports)
+
 ## Define the Aggregate and Commands
 
 ```deql
@@ -54,23 +100,16 @@ EMIT AS
   );
 ```
 
-Promotion is guarded. The decision derives the current grade from event history and only emits if the new grade differs:
+Promotion is guarded. The decision queries the current derived state via `$Agg` and only emits if the new grade differs:
 
 ```deql
 CREATE DECISION Promote
 FOR Employee
 ON COMMAND PromoteEmployee
 STATE AS
-  SELECT
-    LAST(
-      CASE
-        WHEN event_type = 'EmployeeHired'    THEN data.grade
-        WHEN event_type = 'EmployeePromoted'  THEN data.new_grade
-        ELSE NULL
-      END
-    ) AS current_grade
-  FROM DeReg."Employee$Events"
-  WHERE stream_id = :employee_id
+  SELECT COALESCE(new_grade, grade) AS current_grade
+  FROM DeReg."Employee$Agg"
+  WHERE aggregate_id = :employee_id
 EMIT AS
   SELECT EVENT EmployeePromoted (
     new_grade := :new_grade
@@ -163,6 +202,6 @@ SELECT * FROM DeReg."PromotionsReport";
 - **Aggregate** as a consistency boundary
 - **Commands** expressing intent
 - **Events** as immutable facts
-- **Guarded decisions** with STATE AS + WHERE
+- **Guarded decisions** with `$Agg` STATE AS + WHERE
 - **Projections** as derived read models
 - **Rejection** with full diagnostic output (guard, state, command values)

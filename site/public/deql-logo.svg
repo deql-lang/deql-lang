@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 260 100"
+     class="nextra-logo h-6"
+     title="DeQL"
+     style="color:color(display-p3 .8824 0 .5961)">
+
+  <!-- Icon group shifted UP by 6px to align its bottom with text bottom -->
+  <g transform="translate(0 -6)" fill="currentColor">
+
+    <!-- Hub with hole (donut) -->
+    <path fill-rule="evenodd" d="
+      M41 74
+      m -14 0
+      a 14 14 0 1 0 28 0
+      a 14 14 0 1 0 -28 0
+      M41 74
+      m -5.5 0
+      a 5.5 5.5 0 1 0 11 0
+      a 5.5 5.5 0 1 0 -11 0
+    " />
+
+    <!-- Long hand (12 o'clock): tapered, perfectly vertical, with gap -->
+    <path d="M41 12 L47 57 L35 57 Z" />
+
+    <!-- Short hand (3 o'clock): tapered, perfectly horizontal, with gap,
+         aligned to hub center (y=74) -->
+    <path d="M92 74 L58 80 L58 68 Z" />
+  </g>
+
+  <!-- Wordmark -->
+  <text x="105" y="72"
+        font-size="52"
+        font-family="system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+        font-weight="600"
+        fill="currentColor"
+        style="letter-spacing:0.5px">
+    DeQL
+  </text>
+</svg>

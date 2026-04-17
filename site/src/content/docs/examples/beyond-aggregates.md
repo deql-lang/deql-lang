@@ -24,9 +24,9 @@ In a traditional system, this means:
 
 The existing Cart aggregate was never designed for coupons. Extending it means either bloating the aggregate or building coordination infrastructure around it.
 
-## The DeQL Approach: Just Add a Decision
+## The DeQL Approach: Query Both Aggregates in One Decision
 
-In DeQL, the Cart aggregate stays untouched. You register a new Coupon aggregate and write a new decision that queries both. No saga. No compensation. No changes to existing code.
+In DeQL, the `ApplyCoupon` decision queries two independent aggregate event streams in a single STATE AS clause — one from Cart, one from Coupon. No saga. No compensation. No changes to existing code.
 
 ## Step 1: The Existing Cart
 
@@ -40,17 +40,15 @@ CREATE COMMAND AddItem (
   price      DECIMAL
 );
 
-CREATE COMMAND Checkout (
-  cart_id STRING
-);
-
 CREATE EVENT ItemAdded (
   product_id STRING,
   quantity   INT,
   price      DECIMAL
 );
 
-CREATE EVENT CheckedOut ();
+CREATE EVENT CouponAppliedToCart (
+  coupon_id STRING
+);
 
 CREATE DECISION AddItem
 FOR Cart
@@ -61,19 +59,6 @@ EMIT AS
     quantity   := :quantity,
     price      := :price
   );
-
-CREATE DECISION Checkout
-FOR Cart
-ON COMMAND Checkout
-STATE AS
-  SELECT
-    COUNT(*) FILTER (WHERE event_type = 'ItemAdded') AS item_count,
-    COUNT(*) FILTER (WHERE event_type = 'CheckedOut') AS checkout_count
-  FROM DeReg."Cart$Events"
-  WHERE stream_id = :cart_id
-EMIT AS
-  SELECT EVENT CheckedOut ()
-  WHERE item_count > 0 AND checkout_count = 0;
 ```
 
 This is the existing system. Nothing above changes when we add coupons.
@@ -91,15 +76,15 @@ CREATE COMMAND EmitCoupon (
 );
 
 CREATE COMMAND ApplyCoupon (
-  cart_id   STRING,
-  coupon_id STRING
+  coupon_id STRING,
+  cart_id   STRING
 );
 
 CREATE EVENT CouponEmitted (
   quantity INT
 );
 
-CREATE EVENT CouponApplied (
+CREATE EVENT CouponRedeemed (
   cart_id STRING
 );
 
@@ -114,12 +99,12 @@ EMIT AS
 
 ## Step 3: The Cross-Aggregate Decision
 
-This is the key. `ApplyCoupon` queries the Coupon aggregate's event stream to compute:
+This is the key. `ApplyCoupon` queries TWO aggregate event streams in a single STATE AS:
 
-- `remaining_quantity` — coupons emitted minus coupons applied
-- `already_applied_to_cart` — whether this specific cart already used this coupon
+- `Cart$Events` — has this cart already applied a coupon?
+- `Coupon$Events` — does this coupon have remaining quantity?
 
-Both guards must pass. The decision is atomic — no saga, no compensation:
+This mirrors the [Disintegrate](https://disintegrate-es.github.io/disintegrate/developer_journey/add_new_feature) pattern where a decision loads two state queries `(Cart, Coupon)` and checks both before emitting:
 
 ```deql
 CREATE DECISION ApplyCoupon
@@ -127,32 +112,58 @@ FOR Coupon
 ON COMMAND ApplyCoupon
 STATE AS
   SELECT
-    COALESCE(SUM(
-      CASE
-        WHEN event_type = 'CouponEmitted' THEN data.quantity
-        WHEN event_type = 'CouponApplied' THEN -1
-        ELSE 0
-      END
-    ), 0) AS remaining_quantity,
+    -- Check 1: has this cart already applied ANY coupon? (from Cart$Events)
     (
       SELECT COUNT(*)
-      FROM DeReg."Coupon$Events"
-      WHERE stream_id = :coupon_id
-        AND event_type = 'CouponApplied'
-        AND data.cart_id = :cart_id
-    ) AS already_applied_to_cart
+      FROM DeReg."Cart$Events"
+      WHERE stream_id = :cart_id
+        AND event_type = 'CouponAppliedToCart'
+    ) AS cart_has_coupon,
+    -- Check 2: how many coupons remain? (from Coupon$Events)
+    COALESCE(SUM(
+      CASE
+        WHEN event_type = 'CouponEmitted'  THEN data.quantity
+        WHEN event_type = 'CouponRedeemed' THEN -1
+        ELSE 0
+      END
+    ), 0) AS remaining_quantity
   FROM DeReg."Coupon$Events"
   WHERE stream_id = :coupon_id
 EMIT AS
-  SELECT EVENT CouponApplied (
+  SELECT EVENT CouponRedeemed (
     cart_id := :cart_id
   )
-  WHERE remaining_quantity > 0 AND already_applied_to_cart = 0;
+  WHERE cart_has_coupon = 0 AND remaining_quantity > 0;
 ```
 
-Notice: the Cart aggregate was never modified. The coupon feature was added entirely by registering new concepts.
+Both guards are evaluated atomically. No saga. No compensation.
 
-## Step 4: Projections
+## Step 4: Mark Coupon on Cart
+
+After a coupon is redeemed on the Coupon stream, we also record it on the Cart stream so future `ApplyCoupon` calls see `cart_has_coupon = 1`:
+
+```deql
+CREATE COMMAND MarkCouponOnCart (
+  cart_id   STRING,
+  coupon_id STRING
+);
+
+CREATE DECISION MarkCouponOnCart
+FOR Cart
+ON COMMAND MarkCouponOnCart
+STATE AS
+  SELECT
+    COUNT(*) FILTER (WHERE event_type = 'CouponAppliedToCart') AS already_applied
+  FROM DeReg."Cart$Events"
+  WHERE stream_id = :cart_id
+EMIT AS
+  SELECT EVENT CouponAppliedToCart (
+    coupon_id := :coupon_id
+  )
+  WHERE already_applied = 0;
+```
+
+## Step 5: Projections
 
 ```deql
 CREATE PROJECTION CouponAvailability AS
@@ -160,12 +171,20 @@ SELECT
   stream_id AS coupon_id,
   COALESCE(SUM(
     CASE
-      WHEN event_type = 'CouponEmitted' THEN data.quantity
-      WHEN event_type = 'CouponApplied' THEN -1
+      WHEN event_type = 'CouponEmitted'  THEN data.quantity
+      WHEN event_type = 'CouponRedeemed' THEN -1
       ELSE 0
     END
   ), 0) AS remaining
 FROM DeReg."Coupon$Events"
+GROUP BY stream_id;
+
+CREATE PROJECTION CartSummary AS
+SELECT
+  stream_id AS cart_id,
+  COUNT(*) FILTER (WHERE event_type = 'ItemAdded') AS item_count,
+  LAST(data.coupon_id) AS applied_coupon
+FROM DeReg."Cart$Events"
 GROUP BY stream_id;
 ```
 
@@ -182,65 +201,78 @@ EXECUTE EmitCoupon(coupon_id := 'SUMMER-2026', quantity := 3);
     quantity:  3
 ```
 
-Alice builds her cart and applies the coupon:
+Alice builds her cart and applies the coupon (two steps — redeem then mark):
 
 ```deql
 EXECUTE AddItem(cart_id := 'CART-ALICE', product_id := 'WIDGET-A', quantity := 2, price := 25.00);
 EXECUTE AddItem(cart_id := 'CART-ALICE', product_id := 'GADGET-B', quantity := 1, price := 75.00);
 
-EXECUTE ApplyCoupon(cart_id := 'CART-ALICE', coupon_id := 'SUMMER-2026');
+EXECUTE ApplyCoupon(coupon_id := 'SUMMER-2026', cart_id := 'CART-ALICE');
 
-  ✓ CouponApplied
+  ✓ CouponRedeemed
     stream_id:     SUMMER-2026
     seq:           2
     cart_id:  CART-ALICE
+
+EXECUTE MarkCouponOnCart(cart_id := 'CART-ALICE', coupon_id := 'SUMMER-2026');
+
+  ✓ CouponAppliedToCart
+    stream_id:     CART-ALICE
+    seq:           3
+    coupon_id:  SUMMER-2026
 ```
 
-Alice tries to apply the same coupon again — rejected:
+Alice tries to apply the same coupon again — rejected (cart already has a coupon):
 
 ```deql
-EXECUTE ApplyCoupon(cart_id := 'CART-ALICE', coupon_id := 'SUMMER-2026');
+EXECUTE ApplyCoupon(coupon_id := 'SUMMER-2026', cart_id := 'CART-ALICE');
 
   ✗ REJECTED
     decision:  ApplyCoupon
-    guard:     remaining_quantity > 0 AND already_applied_to_cart = 0
-    state:     already_applied_to_cart = 1
+    guard:     cart_has_coupon = 0 AND remaining_quantity > 0
     state:     remaining_quantity = 2
-    command:   cart_id = 'CART-ALICE'
+    state:     cart_has_coupon = 1
     command:   coupon_id = 'SUMMER-2026'
+    command:   cart_id = 'CART-ALICE'
 ```
 
 Bob and Carol each apply it successfully:
 
 ```deql
-EXECUTE ApplyCoupon(cart_id := 'CART-BOB', coupon_id := 'SUMMER-2026');
+EXECUTE ApplyCoupon(coupon_id := 'SUMMER-2026', cart_id := 'CART-BOB');
 
-  ✓ CouponApplied
+  ✓ CouponRedeemed
     stream_id:     SUMMER-2026
     seq:           3
     cart_id:  CART-BOB
 
-EXECUTE ApplyCoupon(cart_id := 'CART-CAROL', coupon_id := 'SUMMER-2026');
+EXECUTE MarkCouponOnCart(cart_id := 'CART-BOB', coupon_id := 'SUMMER-2026');
 
-  ✓ CouponApplied
+EXECUTE ApplyCoupon(coupon_id := 'SUMMER-2026', cart_id := 'CART-CAROL');
+
+  ✓ CouponRedeemed
     stream_id:     SUMMER-2026
     seq:           4
     cart_id:  CART-CAROL
+
+EXECUTE MarkCouponOnCart(cart_id := 'CART-CAROL', coupon_id := 'SUMMER-2026');
 ```
 
 Dave tries — all 3 coupons are used up:
 
 ```deql
-EXECUTE ApplyCoupon(cart_id := 'CART-DAVE', coupon_id := 'SUMMER-2026');
+EXECUTE ApplyCoupon(coupon_id := 'SUMMER-2026', cart_id := 'CART-DAVE');
 
   ✗ REJECTED
     decision:  ApplyCoupon
-    guard:     remaining_quantity > 0 AND already_applied_to_cart = 0
-    state:     already_applied_to_cart = 0
+    guard:     cart_has_coupon = 0 AND remaining_quantity > 0
     state:     remaining_quantity = 0
-    command:   coupon_id = 'SUMMER-2026'
+    state:     cart_has_coupon = 0
     command:   cart_id = 'CART-DAVE'
+    command:   coupon_id = 'SUMMER-2026'
 ```
+
+## Query Projections
 
 ```deql
 SELECT * FROM DeReg."CouponAvailability";
@@ -252,22 +284,32 @@ SELECT * FROM DeReg."CouponAvailability";
 +-------------+-----------+
 ```
 
+```deql
+SELECT * FROM DeReg."CartSummary";
+
++------------+------------+----------------+
+| cart_id    | item_count | applied_coupon |
++------------+------------+----------------+
+| CART-ALICE | 2          | SUMMER-2026    |
+| CART-BOB   | 0          | SUMMER-2026    |
+| CART-CAROL | 0          | SUMMER-2026    |
++------------+------------+----------------+
+```
+
 ## Why This Matters
 
-The Cart aggregate was never touched. The coupon feature was added by:
+The Cart aggregate was never modified. The coupon feature was added by:
 
-1. Registering a new `Coupon` aggregate
-2. Registering new commands and events
-3. Writing one new decision with a cross-aggregate STATE AS
+1. Registering a new `Coupon` aggregate with its own events
+2. Writing one cross-aggregate decision that queries both `Cart$Events` and `Coupon$Events`
+3. Adding a `MarkCouponOnCart` decision to record the coupon on the Cart stream
 
-No existing code was modified. No saga was introduced. No compensation logic was needed.
-
-This is what "beyond aggregates" means — aggregate boundaries protect consistency, but they don't have to block extensibility. In DeQL, new features are additive.
+No existing code was changed. No saga was introduced. No compensation logic was needed.
 
 | Traditional Approach | DeQL Approach |
 |---|---|
-| Modify existing aggregate or add saga | Register new aggregate + decision |
-| Coordination infrastructure | Cross-aggregate STATE AS query |
+| Modify existing aggregate or add saga | Register new aggregate + cross-aggregate decision |
+| Coordination infrastructure | Single STATE AS query across two event streams |
 | Compensation mechanisms | Atomic guard — all-or-nothing |
 | Recovery logic for crashes | Event store replay handles it |
-| Existing code changes required | Zero changes to existing code |
+| Existing code changes required | Zero changes to existing Cart code |
