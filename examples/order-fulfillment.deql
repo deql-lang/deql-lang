@@ -1,9 +1,13 @@
--- Order Fulfillment — Multi-Aggregate Decisions
--- Demonstrates a decision that queries state across two aggregates
--- before emitting an event.
+/*
+ * Order Fulfillment — Multi-Aggregate Decisions
+ *
+ * Demonstrates a decision that queries state across two aggregates
+ * before emitting an event.
+ */
 
--- Two aggregate boundaries: one for orders, one for inventory.
-
+/*
+ * Two aggregate boundaries: one for orders, one for inventory.
+ */
 CREATE AGGREGATE OrderBook;
 CREATE AGGREGATE Warehouse;
 

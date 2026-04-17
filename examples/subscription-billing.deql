@@ -1,6 +1,9 @@
--- Subscription Billing — Computed State and Lifecycle Guards
--- Demonstrates decisions that derive state from event history
--- and use guards to enforce lifecycle rules.
+/*
+ * Subscription Billing — Computed State and Lifecycle Guards
+ *
+ * Demonstrates decisions that derive state from event history
+ * and use guards to enforce lifecycle rules.
+ */
 
 CREATE AGGREGATE Subscription;
 

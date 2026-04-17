@@ -1,11 +1,13 @@
--- Inspect Demo — Validate Before You Ship
--- Demonstrates INSPECT DECISION to simulate and verify
--- decision behavior without writing real events.
+/*
+ * Inspect Demo — Validate Before You Ship
+ *
+ * Demonstrates INSPECT DECISION to simulate and verify
+ * decision behavior without writing real events.
+ */
 
--- ============================================================
--- Define a simple banking domain
--- ============================================================
-
+/*
+ * Define a simple banking domain
+ */
 CREATE AGGREGATE BankAccount;
 
 CREATE COMMAND OpenAccount (

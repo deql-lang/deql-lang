@@ -1,7 +1,10 @@
--- Idempotent Payments — Duplicate Detection at the Decision Level
--- Demonstrates using STATE AS to check for existing events
--- before emitting, ensuring the same payment reference
--- is never processed twice.
+/*
+ * Idempotent Payments — Duplicate Detection at the Decision Level
+ *
+ * Demonstrates using STATE AS to check for existing events
+ * before emitting, ensuring the same payment reference
+ * is never processed twice.
+ */
 
 CREATE AGGREGATE PaymentLedger;
 

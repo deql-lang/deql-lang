@@ -1,16 +1,18 @@
--- Progressive Evolution — Start Small, Grow Safely
--- Demonstrates building a system incrementally:
--- Step 1: Minimal aggregate with one command
--- Step 2: Add a guard
--- Step 3: Add a second command
--- Step 4: Add projections
--- Each step builds on the previous without breaking anything.
+/*
+ * Progressive Evolution — Start Small, Grow Safely
+ *
+ * Demonstrates building a system incrementally:
+ * Step 1: Minimal aggregate with one command
+ * Step 2: Add a guard
+ * Step 3: Add a second command
+ * Step 4: Add projections
+ * Each step builds on the previous without breaking anything.
+ */
 
--- ============================================================
--- Step 1: The simplest possible system
--- One aggregate, one command, one event, one decision.
--- ============================================================
-
+/*
+ * Step 1: The simplest possible system
+ * One aggregate, one command, one event, one decision.
+ */
 CREATE AGGREGATE Task;
 
 CREATE COMMAND CreateTask (

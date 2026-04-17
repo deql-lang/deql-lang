@@ -1,19 +1,20 @@
--- Beyond Aggregates — Cross-Aggregate Decisions
---
--- Challenge: In traditional CQRS-ES, adding coupons to a shopping cart
--- requires coordinating two aggregates (Cart and Coupon). This typically
--- means workflow orchestration, saga patterns, compensation mechanisms,
--- and recovery logic — all to answer one simple question:
--- "Is this coupon still available, and has this cart already used one?"
---
--- In DeQL, a decision can query state from MULTIPLE aggregates in its
--- STATE AS clause. No sagas. No two-phase commits. No compensation.
--- Just a guarded decision that checks both aggregates atomically.
+/*
+ * Beyond Aggregates — Cross-Aggregate Decisions
+ *
+ * Challenge: In traditional CQRS-ES, adding coupons to a shopping cart
+ * requires coordinating two aggregates (Cart and Coupon). This typically
+ * means workflow orchestration, saga patterns, compensation mechanisms,
+ * and recovery logic — all to answer one simple question:
+ * "Is this coupon still available, and has this cart already used one?"
+ *
+ * In DeQL, a decision can query state from MULTIPLE aggregates in its
+ * STATE AS clause. No sagas. No two-phase commits. No compensation.
+ * Just a guarded decision that checks both aggregates atomically.
+ */
 
--- ============================================================
--- Step 1: Define the Shopping Cart aggregate
--- ============================================================
-
+/*
+ * Step 1: Define the Shopping Cart aggregate
+ */
 CREATE AGGREGATE Cart;
 
 CREATE COMMAND AddItem (
@@ -45,10 +46,9 @@ EMIT AS
     price      := :price
   );
 
--- ============================================================
--- Step 2: Define the Coupon aggregate
--- ============================================================
-
+/*
+ * Step 2: Define the Coupon aggregate
+ */
 CREATE AGGREGATE Coupon;
 
 CREATE COMMAND EmitCoupon (

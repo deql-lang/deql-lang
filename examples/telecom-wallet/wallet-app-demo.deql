@@ -1,23 +1,23 @@
--- =============================================================================
--- Telecom Wallet System — DeQL Demo
---
--- A mobile operator manages subscriber balances across multiple wallet types.
--- Every subscriber can have several wallets — main balance, promotional
--- credits, roaming allowance, corporate pool — each following the same
--- top-up/debit pattern but carrying different business context.
---
--- The wallet_aggregate template captures this pattern once. Each APPLY
--- generates a complete aggregate + commands + events + decisions for a
--- new wallet type. Adding a new wallet type (e.g., for a loyalty program
--- or a new roaming zone) is a single APPLY TEMPLATE call.
---
--- Run: cargo run -- -f deql-lang/examples/telecom-wallet/demo.deql
--- =============================================================================
+/*
+ * Telecom Wallet System — DeQL Demo
+ *
+ * A mobile operator manages subscriber balances across multiple wallet types.
+ * Every subscriber can have several wallets — main balance, promotional
+ * credits, roaming allowance, corporate pool — each following the same
+ * top-up/debit pattern but carrying different business context.
+ *
+ * The wallet_aggregate template captures this pattern once. Each APPLY
+ * generates a complete aggregate + commands + events + decisions for a
+ * new wallet type. Adding a new wallet type (e.g., for a loyalty program
+ * or a new roaming zone) is a single APPLY TEMPLATE call.
+ *
+ * Run: cargo run -- -f deql-lang/examples/telecom-wallet/demo.deql
+ */
 
 
--- =====================================================================
--- 1. EVENTSTORE
--- =====================================================================
+/*
+ * 1. EVENTSTORE
+ */
 
 CREATE EVENTSTORE telecom_local WITH (
     envelope.event_id_key    = 'event_id',
@@ -27,21 +27,21 @@ CREATE EVENTSTORE telecom_local WITH (
 );
 
 
--- =====================================================================
--- 2. THE TEMPLATE — wallet_aggregate
---
--- Every wallet type needs:
---   1 aggregate (the wallet boundary)
---   2 commands  (TopUp, Debit)
---   2 events    (ToppedUp, Debited)
---   2 decisions (TopUp unconditional, Debit with positive amount guard)
---
--- Parameters:
---   {{WalletName}} — the wallet type (e.g., Main, Promo, Roaming)
---   {{Currency}}   — the currency code (used in projections/display)
---
--- Each APPLY generates 7 definitions.
--- =====================================================================
+/*
+ * 2. THE TEMPLATE — wallet_aggregate
+ *
+ * Every wallet type needs:
+ *   1 aggregate (the wallet boundary)
+ *   2 commands  (TopUp, Debit)
+ *   2 events    (ToppedUp, Debited)
+ *   2 decisions (TopUp unconditional, Debit with positive amount guard)
+ *
+ * Parameters:
+ *   {{WalletName}} — the wallet type (e.g., Main, Promo, Roaming)
+ *   {{Currency}}   — the currency code (used in projections/display)
+ *
+ * Each APPLY generates 7 definitions.
+ */
 
 CREATE TEMPLATE wallet_aggregate (WalletName, Currency) AS (
 
@@ -92,12 +92,12 @@ CREATE TEMPLATE wallet_aggregate (WalletName, Currency) AS (
 );
 
 
--- =====================================================================
--- 3. APPLY TEMPLATE — instantiate wallet types for a mobile operator
---
--- A typical subscriber has 3 wallets. An enterprise subscriber adds a
--- 4th (CorporatePool). Each APPLY generates 7 definitions.
--- =====================================================================
+/*
+ * 3. APPLY TEMPLATE — instantiate wallet types for a mobile operator
+ *
+ * A typical subscriber has 3 wallets. An enterprise subscriber adds a
+ * 4th (CorporatePool). Each APPLY generates 7 definitions.
+ */
 
 -- Primary prepaid/postpaid balance
 APPLY TEMPLATE wallet_aggregate WITH (WalletName = 'Main', Currency = 'USD');
@@ -119,9 +119,9 @@ DESCRIBE COMMANDS;
 DESCRIBE DECISIONS;
 
 
--- =====================================================================
--- 4. EXECUTE — subscriber lifecycle story
--- =====================================================================
+/*
+ * 4. EXECUTE — subscriber lifecycle story
+ */
 
 -- Subscriber Alice (SUB-001) activates with a $50 top-up
 EXECUTE TopUpMain(wallet_id := 'SUB-001', amount := 50.00);
@@ -155,9 +155,9 @@ EXECUTE DebitCorporatePool(wallet_id := 'CORP-001', amount := 200.00, reason := 
 EXECUTE DebitCorporatePool(wallet_id := 'CORP-001', amount := 75.00, reason := 'employee_carol_sms');
 
 
--- =====================================================================
--- 5. QUERY — see the results
--- =====================================================================
+/*
+ * 5. QUERY — see the results
+ */
 
 -- Alice's main wallet events
 SELECT stream_id, event_type, seq, data
@@ -184,12 +184,12 @@ SELECT stream_id, event_type, seq FROM DeReg."RoamingWallet$Events" ORDER BY str
 SELECT stream_id, event_type, seq FROM DeReg."CorporatePoolWallet$Events" ORDER BY stream_id, seq;
 
 
--- =====================================================================
--- 6. THE EXTENSIBILITY STORY — new wallet type for loyalty program
---
--- Marketing launches a loyalty points program. Instead of modifying
--- existing code, we add a new wallet type with one APPLY call.
--- =====================================================================
+/*
+ * 6. THE EXTENSIBILITY STORY — new wallet type for loyalty program
+ *
+ * Marketing launches a loyalty points program. Instead of modifying
+ * existing code, we add a new wallet type with one APPLY call.
+ */
 
 APPLY TEMPLATE wallet_aggregate WITH (WalletName = 'Loyalty', Currency = 'PTS');
 
@@ -206,12 +206,12 @@ ORDER BY stream_id, seq;
 DESCRIBE TEMPLATE wallet_aggregate;
 
 
--- =====================================================================
--- 7. AND ANOTHER — regional roaming wallet for new market
---
--- The operator expands to a new region. Each region gets its own
--- roaming wallet with a different currency.
--- =====================================================================
+/*
+ * 7. AND ANOTHER — regional roaming wallet for new market
+ *
+ * The operator expands to a new region. Each region gets its own
+ * roaming wallet with a different currency.
+ */
 
 APPLY TEMPLATE wallet_aggregate WITH (WalletName = 'RoamingEU', Currency = 'EUR');
 APPLY TEMPLATE wallet_aggregate WITH (WalletName = 'RoamingAPAC', Currency = 'SGD');
@@ -235,9 +235,9 @@ DESCRIBE TEMPLATE wallet_aggregate;
 DESCRIBE AGGREGATES;
 
 
--- =====================================================================
--- 8. INSPECT — simulate without side effects
--- =====================================================================
+/*
+ * 8. INSPECT — simulate without side effects
+ */
 
 -- Simulate batch top-ups for a campaign
 CREATE TABLE campaign_topups AS VALUES
@@ -252,9 +252,9 @@ INTO simulated_promo_topups;
 SELECT stream_id, event_type, data FROM simulated_promo_topups;
 
 
--- =====================================================================
--- 9. VALIDATE & EXPORT
--- =====================================================================
+/*
+ * 9. VALIDATE & EXPORT
+ */
 
 VALIDATE DEREG;
 EXPORT DEREG;

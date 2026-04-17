@@ -1,15 +1,16 @@
--- Inspect Projection Demo — Verify Read Models Without Side Effects
---
--- Story: A small e-commerce shop wants to validate that its
--- reporting projections produce correct output BEFORE going live.
--- The team uses INSPECT DECISION to simulate orders, then
--- INSPECT PROJECTION to verify the read models — all without
--- writing a single real event.
+/*
+ * Inspect Projection Demo — Verify Read Models Without Side Effects
+ *
+ * Story: A small e-commerce shop wants to validate that its
+ * reporting projections produce correct output BEFORE going live.
+ * The team uses INSPECT DECISION to simulate orders, then
+ * INSPECT PROJECTION to verify the read models — all without
+ * writing a single real event.
+ */
 
--- ============================================================
--- Step 1: Define the domain
--- ============================================================
-
+/*
+ * Step 1: Define the domain
+ */
 CREATE AGGREGATE Shop;
 
 CREATE COMMAND PlaceOrder (

@@ -1,26 +1,26 @@
--- =============================================================================
--- Digital Registry System — DeQL Demo
---
--- A government digital registry platform inspired by the Daksha-RC pattern.
--- Registries manage entities (citizens, schools, facilities, vehicles, etc.)
--- through a standard lifecycle: Create → Modify → Deactivate → Delete.
---
--- The key insight: every registry entity follows the SAME lifecycle pattern
--- regardless of its schema. A citizen has name/address/id_number fields,
--- a school has name/district/capacity fields, but both go through the same
--- state transitions. This makes registries a perfect fit for templates.
---
--- The RegistryEntity template captures the lifecycle once. Adding a new
--- entity type to the system is a single APPLY TEMPLATE call — no new
--- commands, events, or decisions to hand-write.
---
--- Run: cargo run -- -f deql-lang/examples/registry-system/demo.deql
--- =============================================================================
+/*
+ * Digital Registry System — DeQL Demo
+ *
+ * A government digital registry platform inspired by the Daksha-RC pattern.
+ * Registries manage entities (citizens, schools, facilities, vehicles, etc.)
+ * through a standard lifecycle: Create → Modify → Deactivate → Delete.
+ *
+ * The key insight: every registry entity follows the SAME lifecycle pattern
+ * regardless of its schema. A citizen has name/address/id_number fields,
+ * a school has name/district/capacity fields, but both go through the same
+ * state transitions. This makes registries a perfect fit for templates.
+ *
+ * The RegistryEntity template captures the lifecycle once. Adding a new
+ * entity type to the system is a single APPLY TEMPLATE call — no new
+ * commands, events, or decisions to hand-write.
+ *
+ * Run: cargo run -- -f deql-lang/examples/registry-system/demo.deql
+ */
 
 
--- =====================================================================
--- 1. EVENTSTORE
--- =====================================================================
+/*
+ * 1. EVENTSTORE
+ */
 
 CREATE EVENTSTORE registry_local WITH (
     envelope.event_id_key    = 'event_id',
@@ -30,26 +30,28 @@ CREATE EVENTSTORE registry_local WITH (
 );
 
 
--- =====================================================================
--- 2. THE TEMPLATE — RegistryEntity lifecycle pattern
---
--- What a registry entity needs:
---   1 aggregate (the entity boundary)
---   3 commands  (Create, Modify, Deactivate)
---   3 events    (Created, Updated, Deactivated)
---   3 decisions (with business rules)
---
--- Parameters:
---   {{EntityName}} — the entity type name (e.g., Citizen, School)
---   {{Fields}}     — domain-specific fields, expanded into commands/events
---   {{FieldAssignments}} — auto-generated := bindings for emit clauses
---
--- Each APPLY generates 10 definitions from 2 parameters.
--- =====================================================================
+/*
+ * 2. THE TEMPLATE — RegistryEntity lifecycle pattern
+ *
+ * What a registry entity needs:
+ *   1 aggregate (the entity boundary)
+ *   3 commands  (Create, Modify, Deactivate)
+ *   3 events    (Created, Updated, Deactivated)
+ *   3 decisions (with business rules)
+ *
+ * Parameters:
+ *   {{EntityName}} — the entity type name (e.g., Citizen, School)
+ *   {{Fields}}     — domain-specific fields, expanded into commands/events
+ *   {{FieldAssignments}} — auto-generated := bindings for emit clauses
+ *
+ * Each APPLY generates 10 definitions from 2 parameters.
+ */
 
 CREATE TEMPLATE RegistryEntity (EntityName, Fields) AS (
 
-    -- Aggregate: one per entity type
+    /*
+     * Aggregate: one per entity type
+     */
     CREATE AGGREGATE {{EntityName}};
 
     -- Command: create a new entity
@@ -120,13 +122,13 @@ CREATE TEMPLATE RegistryEntity (EntityName, Fields) AS (
 );
 
 
--- =====================================================================
--- 3. APPLY TEMPLATE — instantiate the first three registries
---
--- This is the power of templates: each line below generates a complete
--- aggregate + commands + events + decisions for a new entity type.
--- The Fields parameter carries the domain-specific schema.
--- =====================================================================
+/*
+ * 3. APPLY TEMPLATE — instantiate the first three registries
+ *
+ * This is the power of templates: each line below generates a complete
+ * aggregate + commands + events + decisions for a new entity type.
+ * The Fields parameter carries the domain-specific schema.
+ */
 
 -- Citizen registry (national ID, voter rolls, social services)
 APPLY TEMPLATE RegistryEntity WITH (
@@ -170,9 +172,9 @@ DESCRIBE COMMANDS;
 DESCRIBE DECISIONS;
 
 
--- =====================================================================
--- 4. EXECUTE — run the citizen registry story
--- =====================================================================
+/*
+ * 4. EXECUTE — run the citizen registry story
+ */
 
 -- Register citizens
 EXECUTE CreateCitizen(entity_id := 'CIT-001', created_by := 'admin', full_name := 'Alice Smith', date_of_birth := '1990-05-15', address := '123 Main St', id_number := 'ID-001');
@@ -186,9 +188,9 @@ EXECUTE ModifyCitizen(entity_id := 'CIT-001', modified_by := 'admin', full_name 
 EXECUTE DeactivateCitizen(entity_id := 'CIT-003', deactivated_by := 'admin');
 
 
--- =====================================================================
--- 5. EXECUTE — run the school registry story
--- =====================================================================
+/*
+ * 5. EXECUTE — run the school registry story
+ */
 
 EXECUTE CreateSchool(entity_id := 'SCH-001', created_by := 'edu_admin', school_name := 'Springfield Elementary', district := 'Springfield', principal := 'Seymour Skinner', capacity := 500);
 EXECUTE CreateSchool(entity_id := 'SCH-002', created_by := 'edu_admin', school_name := 'Shelbyville High', district := 'Shelbyville', principal := 'Jane Doe', capacity := 1200);
@@ -197,17 +199,17 @@ EXECUTE CreateSchool(entity_id := 'SCH-002', created_by := 'edu_admin', school_n
 EXECUTE ModifySchool(entity_id := 'SCH-001', modified_by := 'edu_admin', school_name := 'Springfield Elementary', district := 'Springfield', principal := 'Seymour Skinner', capacity := 550);
 
 
--- =====================================================================
--- 6. EXECUTE — run the health facility registry story
--- =====================================================================
+/*
+ * 6. EXECUTE — run the health facility registry story
+ */
 
 EXECUTE CreateHealthFacility(entity_id := 'HF-001', created_by := 'health_admin', facility_name := 'City General Hospital', facility_type := 'hospital', license_number := 'LIC-2024-001', district := 'Central', bed_count := 300);
 EXECUTE CreateHealthFacility(entity_id := 'HF-002', created_by := 'health_admin', facility_name := 'Riverside Clinic', facility_type := 'clinic', license_number := 'LIC-2024-002', district := 'Riverside', bed_count := 25);
 
 
--- =====================================================================
--- 7. QUERY — see the results across all registries
--- =====================================================================
+/*
+ * 7. QUERY — see the results across all registries
+ */
 
 -- Citizen events
 SELECT stream_id, event_type, seq
@@ -225,13 +227,13 @@ FROM DeReg."HealthFacility$Events"
 ORDER BY stream_id, seq;
 
 
--- =====================================================================
--- 8. THE EXTENSIBILITY STORY — adding a new entity type
---
--- Six months later, the government needs a Vehicle registry for
--- transport department. No new code, no new decisions, no new events.
--- Just one APPLY TEMPLATE call.
--- =====================================================================
+/*
+ * 8. THE EXTENSIBILITY STORY — adding a new entity type
+ *
+ * Six months later, the government needs a Vehicle registry for
+ * transport department. No new code, no new decisions, no new events.
+ * Just one APPLY TEMPLATE call.
+ */
 
 APPLY TEMPLATE RegistryEntity WITH (
     EntityName = 'Vehicle',
@@ -260,13 +262,13 @@ ORDER BY stream_id, seq;
 DESCRIBE TEMPLATE RegistryEntity;
 
 
--- =====================================================================
--- 9. AND ANOTHER — Land Parcel registry for the land department
---
--- The pattern scales: each new department gets a full registry by
--- adding one APPLY TEMPLATE call. The lifecycle rules, event schema,
--- and decision logic are inherited from the template.
--- =====================================================================
+/*
+ * 9. AND ANOTHER — Land Parcel registry for the land department
+ *
+ * The pattern scales: each new department gets a full registry by
+ * adding one APPLY TEMPLATE call. The lifecycle rules, event schema,
+ * and decision logic are inherited from the template.
+ */
 
 APPLY TEMPLATE RegistryEntity WITH (
     EntityName = 'LandParcel',
@@ -291,9 +293,9 @@ DESCRIBE TEMPLATE RegistryEntity;
 DESCRIBE AGGREGATES;
 
 
--- =====================================================================
--- 10. INSPECT — simulate a new entity type without side effects
--- =====================================================================
+/*
+ * 10. INSPECT — simulate a new entity type without side effects
+ */
 
 CREATE TABLE test_create_citizens AS VALUES
     ('CIT-100', 'batch_admin', 'Test Person A', '2000-01-01', '1 Test St', 'ID-100'),
@@ -306,9 +308,9 @@ INTO simulated_citizen_events;
 SELECT stream_id, event_type, data FROM simulated_citizen_events;
 
 
--- =====================================================================
--- 11. VALIDATE & EXPORT
--- =====================================================================
+/*
+ * 11. VALIDATE & EXPORT
+ */
 
 VALIDATE DEREG;
 EXPORT DEREG;

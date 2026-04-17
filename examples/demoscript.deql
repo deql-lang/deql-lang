@@ -1,5 +1,7 @@
--- Let’s create an aggregate boundary for our Employee domain.
--- It will process two commands: hire and promote.
+/*
+ * Let’s create an aggregate boundary for our Employee domain.
+ * It will process two commands: hire and promote.
+ */
 
 CREATE AGGREGATE Employee;
 

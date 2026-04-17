@@ -1,19 +1,19 @@
--- =============================================================================
--- Inventory Management System — DeQL Demo
---
--- A multi-warehouse system that tracks different categories of stock items.
--- Each category (fasteners, tools, raw materials) follows the same lifecycle
--- pattern: register → receive → ship → adjust → discontinue. Instead of
--- hand-writing the same commands, events, and decisions for each category,
--- we define a TEMPLATE once and APPLY it per category.
---
--- Run: cargo run -- -f deql-lang/examples/inventory-system/demo.deql
--- =============================================================================
+/*
+ * Inventory Management System — DeQL Demo
+ *
+ * A multi-warehouse system that tracks different categories of stock items.
+ * Each category (fasteners, tools, raw materials) follows the same lifecycle
+ * pattern: register → receive → ship → adjust → discontinue. Instead of
+ * hand-writing the same commands, events, and decisions for each category,
+ * we define a TEMPLATE once and APPLY it per category.
+ *
+ * Run: cargo run -- -f deql-lang/examples/inventory-system/demo.deql
+ */
 
 
--- =====================================================================
--- 1. EVENTSTORE — configure storage
--- =====================================================================
+/*
+ * 1. EVENTSTORE — configure storage
+ */
 
 CREATE EVENTSTORE inventory_local WITH (
     envelope.event_id_key    = 'event_id',
@@ -23,18 +23,20 @@ CREATE EVENTSTORE inventory_local WITH (
 );
 
 
--- =====================================================================
--- 2. TEMPLATE — the reusable stock item lifecycle pattern
---
--- Every stock category needs the same structure:
---   Aggregate, 4 commands, 4 events, 4 decisions
--- The template captures this once. {{Category}} is substituted with
--- the category name (e.g., Fastener, Tool, Material).
--- =====================================================================
+/*
+ * 2. TEMPLATE — the reusable stock item lifecycle pattern
+ *
+ * Every stock category needs the same structure:
+ *   Aggregate, 4 commands, 4 events, 4 decisions
+ * The template captures this once. {{Category}} is substituted with
+ * the category name (e.g., Fastener, Tool, Material).
+ */
 
 CREATE TEMPLATE StockItem (Category) AS (
 
-    -- Aggregate: one per stock category
+    /*
+     * Aggregate: one per stock category
+     */
     CREATE AGGREGATE {{Category}};
 
     -- Commands
@@ -131,12 +133,12 @@ CREATE TEMPLATE StockItem (Category) AS (
 );
 
 
--- =====================================================================
--- 3. APPLY TEMPLATE — instantiate for each stock category
---
--- One line per category. Each APPLY generates an aggregate, 4 commands,
--- 4 events, and 4 decisions — 13 definitions from a single call.
--- =====================================================================
+/*
+ * 3. APPLY TEMPLATE — instantiate for each stock category
+ *
+ * One line per category. Each APPLY generates an aggregate, 4 commands,
+ * 4 events, and 4 decisions — 13 definitions from a single call.
+ */
 
 APPLY TEMPLATE StockItem WITH (Category = 'Fastener');
 APPLY TEMPLATE StockItem WITH (Category = 'Tool');
@@ -151,9 +153,9 @@ DESCRIBE EVENTS;
 DESCRIBE DECISIONS;
 
 
--- =====================================================================
--- 4. PROJECTIONS — read models across all categories
--- =====================================================================
+/*
+ * 4. PROJECTIONS — read models across all categories
+ */
 
 -- Fastener stock levels (counts events by type)
 CREATE PROJECTION FastenerStockLevels AS
@@ -176,9 +178,9 @@ FROM DeReg."Tool$Events"
 GROUP BY stream_id;
 
 
--- =====================================================================
--- 5. EXECUTE — run the warehouse story
--- =====================================================================
+/*
+ * 5. EXECUTE — run the warehouse story
+ */
 
 -- Register fasteners
 EXECUTE RegisterFastener(sku := 'BOLT-M8-50', name := 'M8x50 Hex Bolt', unit_price := 0.45, warehouse := 'WH-EAST');
@@ -208,9 +210,9 @@ EXECUTE ShipTool(sku := 'WRENCH-13', quantity := 5, order_id := 'ORD-1002', dest
 EXECUTE DiscontinueTool(sku := 'DRILL-M6', reason := 'Replaced by carbide version');
 
 
--- =====================================================================
--- 6. QUERY — see the results
--- =====================================================================
+/*
+ * 6. QUERY — see the results
+ */
 
 -- Fastener events
 SELECT stream_id, event_type, seq
@@ -228,9 +230,9 @@ FROM DeReg."Material$Events"
 ORDER BY stream_id, seq;
 
 
--- =====================================================================
--- 7. INSPECT — side-effect-free simulation
--- =====================================================================
+/*
+ * 7. INSPECT — side-effect-free simulation
+ */
 
 -- Simulate registering new fasteners
 CREATE TABLE test_register_fasteners AS VALUES
@@ -244,9 +246,9 @@ INTO simulated_registrations;
 SELECT stream_id, event_type, data FROM simulated_registrations;
 
 
--- =====================================================================
--- 8. VALIDATE & EXPORT
--- =====================================================================
+/*
+ * 8. VALIDATE & EXPORT
+ */
 
 VALIDATE DEREG;
 EXPORT DEREG;

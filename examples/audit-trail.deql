@@ -1,6 +1,9 @@
--- Audit Trail — Projection-Focused Demo
--- A minimal domain with multiple projections showing how
--- the same event stream can power very different read models.
+/*
+ * Audit Trail — Projection-Focused Demo
+ *
+ * A minimal domain with multiple projections showing how
+ * the same event stream can power very different read models.
+ */
 
 CREATE AGGREGATE Document;
 

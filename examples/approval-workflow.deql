@@ -1,7 +1,10 @@
--- Approval Workflow — State Machine with Multiple Transitions
--- Demonstrates guarded decisions that enforce valid state transitions.
--- An expense request moves through: Draft → Submitted → Approved/Rejected
--- with guards preventing invalid transitions.
+/*
+ * Approval Workflow — State Machine with Multiple Transitions
+ *
+ * Demonstrates guarded decisions that enforce valid state transitions.
+ * An expense request moves through: Draft → Submitted → Approved/Rejected
+ * with guards preventing invalid transitions.
+ */
 
 CREATE AGGREGATE ExpenseRequest;
 

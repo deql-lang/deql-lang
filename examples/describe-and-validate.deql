@@ -1,6 +1,9 @@
--- Describe and Validate — DeReg Introspection
--- Demonstrates using DESCRIBE, VALIDATE DEREG, and EXPORT DEREG
--- to inspect and verify a system's definitions.
+/*
+ * Describe and Validate — DeReg Introspection
+ *
+ * Demonstrates using DESCRIBE, VALIDATE DEREG, and EXPORT DEREG
+ * to inspect and verify a system's definitions.
+ */
 
 CREATE AGGREGATE Ticket;
 
