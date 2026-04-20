@@ -31,3 +31,5 @@ pnpm-debug.log*
 .DS_Store
 .history
 .kiro
+.lh
+.vscode

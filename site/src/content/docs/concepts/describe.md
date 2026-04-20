@@ -6,6 +6,8 @@ description: Inspect any concept's definition and metadata in the DeQL Decision 
 DESCRIBE lists any concept registered in the DeReg and returns its definition —
 including DDL, field types, relationships, and metadata.
 
+DeReg stands for **Decision Registry**. It is the registry that holds the compiled DeQL definitions for a system, making the complete model inspectable, exportable, and portable across environments.
+
 DESCRIBE is a structural introspection command: it shows how a concept is
 defined, not how it behaves at runtime.
 
@@ -177,7 +179,7 @@ VALIDATE DEREG;
 
 ## EXPORT DEREG
 
-Dump the entire Decision Registry as reproducible DeQL statements. Useful for backup, migration, or sharing a complete system definition:
+Dump the entire Decision Registry as reproducible DeQL statements. This exported DeQL can then be loaded into another environment, making DeReg the mechanism for moving a full system definition across development, test, staging, and production.
 
 ```deql
 EXPORT DEREG;

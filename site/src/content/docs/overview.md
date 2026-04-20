@@ -117,7 +117,13 @@ SELECT * FROM DeReg."AccountBalance";
 2. Decisions are first-class — Not buried inside handler methods.
 3. Inspection is built-in — Every decision can be simulated without side effects.
 4. Progressive evolution — Start simple, refine incrementally.
-5. No hidden wiring — The DeReg (Decision Registry) captures the complete execution topology. Every command, decision, and event is registered and inspectable via `DESCRIBE`.
+5. No hidden wiring — The DeReg (Decision Registry) captures the complete execution topology. Every command, decision, event, projection, template, and event store definition is registered there and inspectable via `DESCRIBE`.
+
+## DeReg: Decision Registry
+
+DeReg stands for **Decision Registry**.
+
+It is the registry that holds the compiled DeQL definitions for a system: aggregates, commands, events, decisions, projections, templates, and event stores. In other words, DeReg is the portable structural model of a DeQL application.
 
 ## Runtime Model
 ```mermaid

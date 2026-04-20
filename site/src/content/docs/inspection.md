@@ -335,6 +335,60 @@ OFFSET 0;
 | Batched replay | `OFFSET <n> LIMIT <m>` | Large stores, controlled throughput |
 | Shadow build | `INTO staging_table` | Zero-downtime projection migration |
 
+## Hybrid Environment Inspection
+
+Because `INSPECT` is side-effect-free, the CLI is well-suited for scenarios where the data you want to read lives in one environment and the destination belongs to another. Named event stores make this explicit: each environment can have its own declared event store, and inspection `FROM`/`INTO` clauses choose which one to use.
+
+Two common patterns illustrate this:
+
+### Simulated Commands Against Live Production State
+
+When a decision has a `STATE AS` query, it reads from the active aggregate state. If the event store is pointing at production data, `STATE AS` reads real production state. This lets you ask: _"Would these commands succeed against real production data?"_ — without executing anything:
+
+```deql
+-- dev table holds the commands to test
+CREATE TABLE test_promotions AS VALUES
+  ('EMP-001', 'L6'),
+  ('EMP-002', 'L4');
+
+INSPECT DECISION Promote
+FROM test_promotions       -- simulated commands (dev)
+INTO simulated_results;    -- output lands in a dev/local temp table
+
+-- The WHERE guard in Promote reads Employee$Agg from production.
+-- Results show which promotions would be accepted or rejected given real state.
+SELECT stream_id, event_type, data FROM simulated_results;
+```
+
+The aggregate lives in production. The simulated commands and the event destination are local. No production state is mutated.
+
+### Production Events Through a SIT Projection
+
+When developing or validating a new projection, you can feed it real events from production and write the results to a SIT (system integration test) staging table — without touching the live projection:
+
+```deql
+-- Events stay in production; projection logic runs against them
+-- and output lands in a SIT-local staging table
+INSPECT PROJECTION NewHireReport
+FROM DeReg."Employee$Events"   -- production event stream
+INTO sit_new_hire_report;       -- SIT staging target
+
+-- Validate shape and correctness before promoting the projection
+SELECT * FROM sit_new_hire_report ORDER BY employee_id;
+```
+
+Real production events flow through the new projection logic. The live projection is not touched. Once the output is verified, the projection can be deployed to SIT or production.
+
+### Summary
+
+| Pattern | Reads from | Writes to | What it validates |
+|---|---|---|---|
+| Command safety check | Production aggregate state (`$Agg`) | Dev temp table | Would these commands succeed against live state? |
+| Projection validation | Production event stream (`$Events`) | SIT staging table | Does new projection logic produce correct output? |
+| Full pipeline on real data | Production (state + events) | Dev / SIT tables | Full command → event → read model correctness on real data |
+
+The CLI is the natural tool for these patterns because it connects directly to named event stores, supports iterative refinement, and the inspection is side-effect-free by design. The REST API is designed for single-environment application integration, not cross-environment inspection.
+
 ## Key Properties
 
 | Property | Description |
