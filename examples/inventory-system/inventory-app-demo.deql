@@ -7,7 +7,6 @@
  * hand-writing the same commands, events, and decisions for each category,
  * we define a TEMPLATE once and APPLY it per category.
  *
- * Run: cargo run -- -f deql-lang/examples/inventory-system/demo.deql
  */
 
 

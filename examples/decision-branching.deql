@@ -1,0 +1,142 @@
+/*
+ * Decision Branching — UNION ALL
+ *
+ * Demonstrates branched decisions where a single command can
+ * produce different events depending on state.  Each branch
+ * has its own guard and emit items.  The command is rejected
+ * only when zero branches match.
+ */
+
+CREATE AGGREGATE Warehouse;
+
+-- Commands
+
+CREATE COMMAND FulfillOrder (
+  warehouse_id  STRING,
+  order_id      STRING,
+  requested_qty INT
+);
+
+-- Events
+
+CREATE EVENT OrderFullyFilled (
+  order_id STRING,
+  quantity INT
+);
+
+CREATE EVENT OrderPartiallySplit (
+  order_id  STRING,
+  filled    INT,
+  remaining INT
+);
+
+CREATE EVENT OrderBackordered (
+  order_id STRING,
+  quantity INT
+);
+
+/*
+ * A branched decision with three mutually exclusive outcomes.
+ * Exactly one branch fires depending on available_qty.
+ */
+CREATE DECISION FulfillOrderDecision
+FOR Warehouse
+ON COMMAND FulfillOrder
+STATE AS
+  SELECT available_qty
+  FROM DeReg."WarehouseStock"
+  WHERE aggregate_id = :warehouse_id
+EMIT AS
+  -- Branch 1: FullFill
+  -- Fires when the warehouse has enough stock to fully satisfy the order.
+  -- Condition: available_qty >= requested_qty
+  BRANCH FullFill
+  SELECT EVENT OrderFullyFilled (
+    order_id := :order_id,
+    quantity := :requested_qty
+  )
+  WHERE available_qty >= :requested_qty
+
+  UNION ALL
+
+  -- Branch 2: PartialFill
+  -- Fires when the warehouse has some stock, but not enough to fully satisfy the order.
+  -- Condition: 0 < available_qty < requested_qty
+  BRANCH PartialFill
+  SELECT EVENT OrderPartiallySplit (
+    order_id  := :order_id,
+    filled    := available_qty,
+    remaining := :requested_qty - available_qty
+  )
+  WHERE available_qty > 0 AND available_qty < :requested_qty
+
+  UNION ALL
+
+  -- Branch 3: Backorder
+  -- Fires when the warehouse has no stock (or negative, e.g. oversold).
+  -- Condition: available_qty <= 0
+  BRANCH Backorder
+  SELECT EVENT OrderBackordered (
+    order_id := :order_id,
+    quantity := :requested_qty
+  )
+  WHERE available_qty <= 0
+;
+
+/*
+ * Seed stock so the aggregate has state.
+ */
+CREATE COMMAND ReceiveStock (
+  warehouse_id STRING,
+  product_id   STRING,
+  quantity     INT
+);
+
+CREATE EVENT StockReceived (
+  product_id STRING,
+  quantity   INT
+);
+
+CREATE DECISION ReceiveStockDecision
+FOR Warehouse
+ON COMMAND ReceiveStock
+EMIT AS
+  SELECT EVENT StockReceived (
+    product_id := :product_id,
+    quantity   := :quantity
+  );
+
+/*
+ * Projection: sum up stock for the aggregate provider.
+ */
+CREATE PROJECTION WarehouseStock AS
+  SELECT
+    stream_id AS aggregate_id,
+    COALESCE(SUM(
+      CASE
+        WHEN event_type = 'StockReceived'        THEN CAST(data.quantity AS INT)
+        WHEN event_type = 'OrderFullyFilled'     THEN -CAST(data.quantity AS INT)
+        WHEN event_type = 'OrderPartiallySplit'   THEN -CAST(data.filled AS INT)
+        ELSE 0
+      END
+    ), 0) AS available_qty
+  FROM DeReg."Warehouse$Events"
+  GROUP BY stream_id;
+
+/*
+ * Try it out:
+ *
+ *   EXECUTE ReceiveStock(warehouse_id := 'WH-1', product_id := 'SKU-A', quantity := 10);
+ *
+ *   -- Full fill: available_qty = 10, requested_qty = 5
+ *   -- Branch executed: FullFill (OrderFullyFilled)
+ *   EXECUTE FulfillOrder(warehouse_id := 'WH-1', order_id := 'ORD-1', requested_qty := 5);
+ *
+ *   -- Partial fill: available_qty = 5, requested_qty = 8
+ *   -- Branch executed: PartialFill (OrderPartiallySplit)
+ *   EXECUTE FulfillOrder(warehouse_id := 'WH-1', order_id := 'ORD-2', requested_qty := 8);
+ *
+ *   -- Backorder: available_qty = 0, requested_qty = 3
+ *   -- Branch executed: Backorder (OrderBackordered)
+ *   EXECUTE FulfillOrder(warehouse_id := 'WH-1', order_id := 'ORD-3', requested_qty := 3);
+ */

@@ -81,6 +81,7 @@ export default defineConfig({
 								{ label: 'Order Fulfillment', slug: 'examples/order-fulfillment' },
 								{ label: 'Idempotent Payments', slug: 'examples/idempotent-payments' },
 								{ label: 'Subscription Billing', slug: 'examples/subscription-billing' },
+								{ label: 'Decision Branching', slug: 'examples/decision-branching' },
 							],
 						},
 						{
@@ -98,6 +99,7 @@ export default defineConfig({
 								{ label: 'Inventory System', slug: 'examples/inventory-system' },
 								{ label: 'Registry System', slug: 'examples/registry-system' },
 								{ label: 'Telecom Wallet', slug: 'examples/telecom-wallet' },
+								{ label: 'Admin Login App', slug: 'examples/admin-login-app' },
 							],
 						},
 					],

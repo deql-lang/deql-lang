@@ -1,6 +1,6 @@
 ---
 title: DECISION
-description: "STATE AS, EMIT AS, guards, and multi-state queries across aggregates in DeQL."
+description: "STATE AS, EMIT AS, guards, branching with UNION ALL, and multi-state queries across aggregates in DeQL."
 ---
 
 A Decision is the central executable unit in DeQL. It is the only concept that runs at runtime. A decision binds a command, aggregate state, and business rules into a deterministic outcome — producing events or rejecting the command.
@@ -30,10 +30,22 @@ ON COMMAND <CommandType>
     [JOIN DeReg."<OtherAggregate>$Agg" ON ...]
     WHERE aggregate_id = :<id_field>]
 EMIT AS
+    [BRANCH <RuleName>]
     SELECT EVENT <EventType> (
         <field> := <expression>,
         ...
-    );
+    )
+    [WHERE <guard>]
+
+    [UNION ALL
+
+    [BRANCH <RuleName>]
+    SELECT EVENT <EventType> (
+        <field> := <expression>,
+        ...
+    )
+    [WHERE <guard>]]
+;
 ```
 
 The `STATE AS` clause is standard SQL. It can query a single aggregate, join multiple aggregates, use subqueries against `$Events` streams, or any combination — there are no restrictions on how many aggregates a decision can read.
@@ -286,6 +298,106 @@ EMIT AS                                   -- Event production
 | `STATE AS` | No | Queries current aggregate state for use in EMIT |
 | `EMIT AS` | Yes | Defines which event(s) to produce |
 | `WHERE` (in EMIT) | No | Guard condition — event only emits if true |
+| `UNION ALL` | No | Separates independent branches in EMIT AS |
+| `BRANCH` | No | Optional label for a branch (descriptive only) |
+
+## Branching With UNION ALL
+
+A single decision can contain multiple independent branches separated by `UNION ALL`. Each branch has its own emit items and optional guard. At execution time, every branch whose guard passes (or has no guard) emits its events. The command is rejected only if **zero** branches emit.
+
+This replaces the need for multiple decisions or complex guard logic when a single command can produce different events depending on state.
+
+### Syntax
+
+```deql
+EMIT AS
+    BRANCH <RuleName1>
+    SELECT EVENT <EventA> (...)
+    WHERE <condition1>
+
+    UNION ALL
+
+    BRANCH <RuleName2>
+    SELECT EVENT <EventB> (...)
+    WHERE <condition2>
+;
+```
+
+`BRANCH` labels are optional and descriptive — they appear in `DESCRIBE` output and inspection results but do not affect execution.
+
+### Example: Order Fulfillment With Split/Backorder
+
+A single `PlaceOrder` command may fully fill the order, partially fill it, or backorder it entirely, depending on stock levels:
+
+```deql
+CREATE DECISION PlaceOrderDecision
+FOR Warehouse
+ON COMMAND PlaceOrder
+STATE AS
+    SELECT available_qty
+    FROM DeReg."Warehouse$Agg"
+    WHERE aggregate_id = :warehouse_id
+EMIT AS
+    BRANCH FullFill
+    SELECT EVENT OrderFulfilled (
+        quantity := :requested_qty
+    )
+    WHERE available_qty >= :requested_qty
+
+    UNION ALL
+
+    BRANCH PartialFill
+    SELECT EVENT OrderPartiallySplit (
+        filled   := available_qty,
+        remaining := :requested_qty - available_qty
+    )
+    WHERE available_qty > 0 AND available_qty < :requested_qty
+
+    UNION ALL
+
+    BRANCH Backorder
+    SELECT EVENT OrderBackordered (
+        quantity := :requested_qty
+    )
+    WHERE available_qty <= 0
+;
+```
+
+At runtime, exactly one branch's guard passes depending on `available_qty`. The decision never rejects — at least one branch always matches.
+
+### Example: Notification Routing
+
+Different notification events based on severity:
+
+```deql
+CREATE DECISION RouteAlert
+FOR AlertSystem
+ON COMMAND RaiseAlert
+EMIT AS
+    BRANCH Critical
+    SELECT EVENT PagerTriggered (
+        message := :message,
+        level   := 'CRITICAL'
+    )
+    WHERE :severity = 'CRITICAL'
+
+    UNION ALL
+
+    BRANCH Normal
+    SELECT EVENT EmailSent (
+        message := :message,
+        level   := :severity
+    )
+    WHERE :severity <> 'CRITICAL'
+;
+```
+
+### Semantics
+
+- Branches are evaluated **independently** — multiple branches can emit in the same execution if their guards are not mutually exclusive.
+- If no branch emits (all guards fail), the command is **rejected**. The rejection message includes all guard expressions.
+- Each branch can emit multiple events (comma-separated `SELECT EVENT` items).
+- A decision without `UNION ALL` is a single-branch decision — fully backward compatible.
 
 ## Determinism
 

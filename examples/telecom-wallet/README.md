@@ -20,12 +20,6 @@ The demo walks through realistic subscriber scenarios:
 - Bob (SUB-002): enterprise user with roaming across EU and APAC
 - CORP-001: shared corporate pool with employee charges
 
-## Running
-
-```bash
-cargo run -- -f deql-lang/examples/telecom-wallet/demo.deql
-```
-
 ## Concepts Covered
 
 | Concept | What it does in this demo |

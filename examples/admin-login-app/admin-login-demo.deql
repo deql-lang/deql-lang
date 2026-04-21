@@ -1,0 +1,402 @@
+/*
+ * Admin Login — Decision Branching Demo
+ *
+ * Demonstrate use of UNION ALL branching: a single LoginAdmin command
+ * produces EITHER AdminLoginSucceeded OR AdminLoginFailed as a
+ * first-class domain event.  No silent rejections, no second command
+ * needed — one decision, two branches, one event always recorded.
+ *
+ * Passwords are compared via SHA-256 digest so the hash — not the
+ * plaintext — travels through the decision.
+ * The password_hash field is annotated SENSITIVE: stored but never returned.
+ * The session_token field is annotated VOLATILE: returned to caller but never stored.
+ *
+ */
+
+
+-- ===============================================================
+-- 1. AGGREGATE
+-- ===============================================================
+
+CREATE AGGREGATE AdminAccount;
+
+
+-- ===============================================================
+-- 2. COMMANDS
+-- ===============================================================
+
+CREATE COMMAND BootstrapAdmin (
+  user_id       STRING,
+  username      STRING,
+  password_hash STRING      -- caller supplies digest('raw', 'sha256') hash is used inplace of clear text to avoid ci/cd leaking passwords
+);
+
+CREATE COMMAND LoginAdmin (
+  user_id  STRING,
+  password STRING            -- plaintext; decision hashes before comparing
+);
+
+CREATE COMMAND ChangePassword (
+  user_id      STRING,
+  old_password STRING,
+  new_password STRING
+);
+
+
+-- ===============================================================
+-- 3. EVENTS (with field annotations)
+-- ===============================================================
+
+-- The password_hash is SENSITIVE: stored, but never returned to the caller.
+CREATE EVENT AdminBootstrapped (
+  username      STRING,
+  password_hash STRING SENSITIVE
+);
+
+-- Successful login emits a session_token (VOLATILE, never persisted) and login_at timestamp.
+CREATE EVENT AdminLoginSucceeded (
+  session_token STRING VOLATILE,  -- returned to caller, not persisted
+  login_at      STRING            -- ISO timestamp, persisted
+);
+
+-- Failed login attempt (no sensitive/volatile fields needed).
+CREATE EVENT AdminLoginFailed (
+  attempted_at STRING,            -- ISO timestamp
+  reason       STRING
+);
+
+-- Password change event: new hash is SENSITIVE.
+CREATE EVENT PasswordChanged (
+  new_password_hash STRING SENSITIVE
+);
+
+
+-- ===============================================================
+-- 4. DECISIONS
+-- ===============================================================
+
+/*
+ * Bootstrap: create the initial admin account (idempotent guard).
+ */
+CREATE DECISION BootstrapAdminDecision
+FOR AdminAccount
+ON COMMAND BootstrapAdmin
+STATE AS
+  SELECT 1 AS existing_flag
+  FROM DeReg."AdminAccount$Events"
+  WHERE stream_id = :user_id
+    AND event_type = 'AdminBootstrapped'
+  LIMIT 1
+EMIT AS
+  SELECT EVENT AdminBootstrapped (
+    username      := :username,
+    password_hash := :password_hash
+  )
+  WHERE existing_flag IS NULL;
+
+/*
+ * Login — branched decision (the core of this demo).
+ *
+ * Branch 1 (PasswordMatch):  fires when the SHA-256 hex digest
+ *   of :password matches the stored hash  →  emits AdminLoginSucceeded.
+ * Branch 2 (PasswordMismatch):  fires otherwise
+ *   →  emits AdminLoginFailed with a reason.
+ *
+ * The guards are logical complements, so exactly one branch always
+ * fires and the command is never rejected.
+ */
+CREATE DECISION LoginAdminDecision
+FOR AdminAccount
+ON COMMAND LoginAdmin
+STATE AS
+  SELECT
+    COALESCE(
+      LAST(CASE WHEN event_type = 'PasswordChanged'
+                THEN data.new_password_hash END),
+      LAST(CASE WHEN event_type = 'AdminBootstrapped'
+                THEN data.password_hash END)
+    ) AS current_hash
+  FROM DeReg."AdminAccount$Events"
+  WHERE stream_id = :user_id
+EMIT AS
+  BRANCH PasswordMatch
+  SELECT EVENT AdminLoginSucceeded (
+    session_token := encode(digest(CAST(random() AS VARCHAR), 'sha256'), 'hex'),
+    login_at := ARROW_CAST(CAST(CURRENT_TIMESTAMP AS VARCHAR), 'Utf8')
+  )
+  WHERE current_hash IS NOT NULL
+    AND encode(digest(:password, 'sha256'), 'hex') = current_hash
+
+  UNION ALL
+
+  BRANCH PasswordMismatch
+  SELECT EVENT AdminLoginFailed (
+    attempted_at := ARROW_CAST(CAST(CURRENT_TIMESTAMP AS VARCHAR), 'Utf8'),
+    reason       := CASE
+                      WHEN current_hash IS NULL THEN 'account_not_found'
+                      ELSE 'invalid_password'
+                    END
+  )
+  WHERE current_hash IS NULL
+     OR encode(digest(:password, 'sha256'), 'hex') <> current_hash
+;
+
+/*
+ * Change password — guarded by old password + no-op prevention.
+ */
+CREATE DECISION ChangePasswordDecision
+FOR AdminAccount
+ON COMMAND ChangePassword
+STATE AS
+  SELECT
+    COALESCE(
+      LAST(CASE WHEN event_type = 'PasswordChanged'
+                THEN data.new_password_hash END),
+      LAST(CASE WHEN event_type = 'AdminBootstrapped'
+                THEN data.password_hash END)
+    ) AS current_hash
+  FROM DeReg."AdminAccount$Events"
+  WHERE stream_id = :user_id
+EMIT AS
+  SELECT EVENT PasswordChanged (
+    new_password_hash := encode(digest(:new_password, 'sha256'), 'hex')
+  )
+  WHERE encode(digest(:old_password, 'sha256'), 'hex') = current_hash
+    AND encode(digest(:new_password, 'sha256'), 'hex') <> current_hash;
+
+
+-- ===============================================================
+-- 5. PROJECTIONS
+-- ===============================================================
+
+CREATE PROJECTION LoginMetrics AS
+  SELECT
+    stream_id AS user_id,
+    COUNT(*) FILTER (WHERE event_type = 'AdminLoginSucceeded') AS success_count,
+    COUNT(*) FILTER (WHERE event_type = 'AdminLoginFailed')    AS failure_count,
+    LAST(CASE WHEN event_type = 'AdminLoginSucceeded'
+              THEN data.login_at END) AS last_login_at,
+    LAST(CASE WHEN event_type = 'AdminLoginFailed'
+              THEN data.attempted_at END) AS last_failure_at
+  FROM DeReg."AdminAccount$Events"
+  GROUP BY stream_id;
+
+CREATE PROJECTION FailedLoginReport AS
+  SELECT
+    stream_id AS user_id,
+    seq,
+    data.attempted_at AS attempted_at,
+    data.reason       AS reason
+  FROM DeReg."AdminAccount$Events"
+  WHERE event_type = 'AdminLoginFailed'
+  ORDER BY stream_id, seq;
+
+
+-- ===============================================================
+-- 6. EXECUTE — real admin lifecycle
+-- ===============================================================
+
+-- Bootstrap with a pre-computed SHA-256 hash.
+-- digest('s3cret', 'sha256') = 1ec1c26b50d5d3c58d9583181af8076655fe00756bf7285940ba3670f99fcba0
+EXECUTE BootstrapAdmin(
+  user_id       := 'ADMIN-001',
+  username      := 'alice',
+  password_hash := '1ec1c26b50d5d3c58d9583181af8076655fe00756bf7285940ba3670f99fcba0'
+);
+-- ✓ AdminBootstrapped
+--   stream_id:  ADMIN-001
+--   seq:        1
+--   username:   alice
+--   password_hash:  ****
+
+-- Attempt to bootstrap the same user again → REJECTED by guard.
+
+EXECUTE BootstrapAdmin(
+  user_id       := 'ADMIN-001',
+  username      := 'alice',
+  password_hash := '1ec1c26b50d5d3c58d9583181af8076655fe00756bf7285940ba3670f99fcba0'
+);
+
+ ✗ REJECTED
+    decision:  BootstrapAdminDecision
+    guard:     existing_flag IS NULL
+    state:     existing_flag = 1
+    command:   password_hash = '1ec1c26b50d5d3c58d9583181af8076655fe00756bf7285940ba3670f99fcba0'
+    command:   username = 'alice'
+    command:   user_id = 'ADMIN-001'
+
+-- Successful login (correct password → PasswordMatch branch).
+EXECUTE LoginAdmin(user_id := 'ADMIN-001', password := 's3cret');
+-- ✓ AdminLoginSucceeded
+--   stream_id:  ADMIN-001
+--   seq:        2
+--   session_token:  <opaque-token>
+--   login_at:   2026-04-21T11:34:45.123456
+
+-- Wrong password → PasswordMismatch branch fires (NOT a rejection).
+EXECUTE LoginAdmin(user_id := 'ADMIN-001', password := 'wrong');
+-- ✓ AdminLoginFailed
+--   stream_id:  ADMIN-001
+--   seq:        3
+--   attempted_at:  2026-04-21T11:34:48.260307
+--   reason:    invalid_password
+
+-- Unknown user → PasswordMismatch branch fires.
+EXECUTE LoginAdmin(user_id := 'ADMIN-999', password := 'any');
+-- ✓ AdminLoginFailed
+--   stream_id:  ADMIN-999
+--   seq:        4
+--   attempted_at:  2026-04-21T11:34:50.000000
+--   reason:    account_not_found
+
+-- Change password (old must match, new must differ).
+EXECUTE ChangePassword(
+  user_id      := 'ADMIN-001',
+  old_password := 's3cret',
+  new_password := 'N3wP@ss!'
+);
+-- ✓ PasswordChanged
+--   stream_id:  ADMIN-001
+--   seq:        5
+--   new_password_hash:  ****
+
+-- Login with the new password.
+EXECUTE LoginAdmin(user_id := 'ADMIN-001', password := 'N3wP@ss!');
+-- ✓ AdminLoginSucceeded
+--   stream_id:  ADMIN-001
+--   seq:        6
+--   session_token:  <opaque-token>
+--   login_at:   2026-04-21T11:34:55.000000
+
+-- Login with the OLD password → now a failure.
+EXECUTE LoginAdmin(user_id := 'ADMIN-001', password := 's3cret');
+-- ✓ AdminLoginFailed
+--   stream_id:  ADMIN-001
+--   seq:        7
+--   attempted_at:  2026-04-21T11:34:57.000000
+--   reason:    invalid_password
+
+
+-- ===============================================================
+-- 7. VERIFY — query the event store and projections
+-- ===============================================================
+
+-- Full event history — both successes and failures are first-class events.
+SELECT stream_id, seq, event_type, data
+FROM DeReg."AdminAccount$Events"
+ORDER BY seq;
+
+-- Login metrics per user.
+SELECT * FROM DeReg."LoginMetrics";
+
+-- All failed login attempts.
+SELECT * FROM DeReg."FailedLoginReport";
+
+
+-- ===============================================================
+-- 8. INSPECT DECISION — simulate a batch of logins
+-- ===============================================================
+
+/*
+ * INSPECT runs the decision against test data without persisting events.
+ * Because LoginAdminDecision uses branching, every input row produces
+ * exactly one event (success or failure) — no commands are rejected.
+ */
+
+-- First bootstrap a real account so INSPECT has state to query.
+-- (ADMIN-001 already exists from step 6 above.)
+
+CREATE TABLE test_logins AS VALUES
+  ('ADMIN-001', 'N3wP@ss!'),
+  ('ADMIN-001', 'wrong'),
+  ('ADMIN-999', 'anything');
+
+INSPECT DECISION LoginAdminDecision
+FROM test_logins
+INTO simulated_login_events;
+
+-- Every row produced an event — no __REJECTED__ rows.
+SELECT stream_id, event_type, data
+FROM simulated_login_events;
+
+/*
+ * Expected output:
+ *
+ * +----------+---------------------+---------------------------------------------+
+ * | stream_id| event_type          | data                                        |
+ * +----------+---------------------+---------------------------------------------+
+ * | ADMIN-001| AdminLoginSucceeded | {"login_at":"..."}                          |
+ * | ADMIN-001| AdminLoginFailed    | {"attempted_at":"...","reason":"invalid_..."}|
+ * | ADMIN-999| AdminLoginFailed    | {"attempted_at":"...","reason":"account_..."}|
+ * +----------+---------------------+---------------------------------------------+
+ */
+
+
+-- ===============================================================
+-- 9. INSPECT __branches — per-branch outcome matrix
+-- ===============================================================
+
+/*
+ * INSPECT automatically creates a companion table with the __branches suffix.
+ * It has one row per input-row per branch, showing which branches fired
+ * (emitted) and which didn't (guard_failed).
+ *
+ * For LoginAdminDecision with 3 input rows × 2 branches = 6 branch rows.
+ */
+
+SELECT
+  inspect_row_index,
+  branch_id,
+  branch_index,
+  branch_rule_name,
+  branch_status,
+  event_type,
+  stream_id
+FROM simulated_login_events__branches
+ORDER BY inspect_row_index, branch_index;
+
+/*
+ * Expected output (6 rows — 2 branches × 3 input rows):
+ *
+ * +-------------------+--------------+------------------+---------------+---------------------+-----------+
+ * | inspect_row_index | branch_index | branch_rule_name | branch_status | event_type          | stream_id |
+ * +-------------------+--------------+------------------+---------------+---------------------+-----------+
+ * | 0                 | 1            | PasswordMatch    | emitted       | AdminLoginSucceeded | ADMIN-001 |
+ * | 0                 | 2            | PasswordMismatch | guard_failed  | NULL                | ADMIN-001 |
+ * | 1                 | 1            | PasswordMatch    | guard_failed  | NULL                | ADMIN-001 |
+ * | 1                 | 2            | PasswordMismatch | emitted       | AdminLoginFailed    | ADMIN-001 |
+ * | 2                 | 1            | PasswordMatch    | guard_failed  | NULL                | ADMIN-999 |
+ * | 2                 | 2            | PasswordMismatch | emitted       | AdminLoginFailed    | ADMIN-999 |
+ * +-------------------+--------------+------------------+---------------+---------------------+-----------+
+ *
+ * Row 0: correct password  → PasswordMatch emitted, PasswordMismatch guard_failed
+ * Row 1: wrong password    → PasswordMatch guard_failed, PasswordMismatch emitted
+ * Row 2: unknown user      → PasswordMatch guard_failed, PasswordMismatch emitted
+ */
+
+-- Branch guard text shows the actual SQL predicates:
+
+SELECT DISTINCT branch_rule_name, branch_guard
+FROM simulated_login_events__branches;
+-- Expected output:
+-- +------------------+------------------------------------------------------------------------------------------------+
+-- | branch_rule_name | branch_guard                                                                                   |
+-- +------------------+------------------------------------------------------------------------------------------------+
+-- | PasswordMatch    | current_hash IS NOT NULL AND encode ( digest ( :password , 'sha256' ) , 'hex' ) = current_hash |
+-- | PasswordMismatch | current_hash IS NULL OR encode ( digest ( :password , 'sha256' ) , 'hex' ) <> current_hash     |
+-- +------------------+------------------------------------------------------------------------------------------------+
+
+-- Count emitted vs guard_failed across all rows:
+
+SELECT branch_status, COUNT(*) AS cnt
+FROM simulated_login_events__branches
+GROUP BY branch_status;
+-- Expected output:
+-- +---------------+-----+
+-- | branch_status | cnt |
+-- +---------------+-----+
+-- | guard_failed  | 3   |
+-- | emitted       | 3   |
+-- +---------------+-----+
+
+SELECT * FROM simulated_login_events__branches;

@@ -34,11 +34,6 @@ The demo starts with 3 registries (Citizen, School, HealthFacility), then shows 
 
 Final state: 5 registries, 50 definitions, all from 1 template.
 
-## Running
-
-```bash
-cargo run -- -f deql-lang/examples/registry-system/demo.deql
-```
 
 ## Concepts Covered
 

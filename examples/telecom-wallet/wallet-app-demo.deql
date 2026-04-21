@@ -10,8 +10,6 @@
  * generates a complete aggregate + commands + events + decisions for a
  * new wallet type. Adding a new wallet type (e.g., for a loyalty program
  * or a new roaming zone) is a single APPLY TEMPLATE call.
- *
- * Run: cargo run -- -f deql-lang/examples/telecom-wallet/demo.deql
  */
 
 

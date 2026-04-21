@@ -13,8 +13,6 @@
  * The RegistryEntity template captures the lifecycle once. Adding a new
  * entity type to the system is a single APPLY TEMPLATE call — no new
  * commands, events, or decisions to hand-write.
- *
- * Run: cargo run -- -f deql-lang/examples/registry-system/demo.deql
  */
 
 

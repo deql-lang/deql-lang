@@ -15,12 +15,6 @@ APPLY TEMPLATE StockItem WITH (Category = 'Tool');
 APPLY TEMPLATE StockItem WITH (Category = 'Material');
 ```
 
-## Running
-
-```bash
-cargo run -- -f deql-lang/examples/inventory-system/demo.deql
-```
-
 ## Concepts Covered
 
 | Concept | What it does in this demo |
