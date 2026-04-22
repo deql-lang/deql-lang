@@ -89,4 +89,3 @@ SELECT * FROM simulated_order_events__branches;
 
 This pattern is useful for any scenario where a command can have multiple mutually exclusive outcomes, and you want to record each as a first-class event.
 
-See the full script in [`decision-branching.deql`](../../../../examples/decision-branching.deql).
