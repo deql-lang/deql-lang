@@ -100,6 +100,7 @@ export default defineConfig({
 								{ label: 'Registry System', slug: 'examples/registry-system' },
 								{ label: 'Telecom Wallet', slug: 'examples/telecom-wallet' },
 								{ label: 'Admin Login App', slug: 'examples/admin-login-app' },
+								{ label: 'Admin Login REST API', slug: 'examples/admin-login-app-rest-api' },
 							],
 						},
 					],
