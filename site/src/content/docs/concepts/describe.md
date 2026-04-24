@@ -42,7 +42,6 @@ deql> DESCRIBE AGGREGATE BankAccount;
   Aggregate:  BankAccount
   Events:     AccountOpened, Deposited
   Decisions:  Open, DepositFunds
-  Projection: AccountBalance
 ```
 
 ### Describe a Command

@@ -82,6 +82,7 @@ export default defineConfig({
 								{ label: 'Idempotent Payments', slug: 'examples/idempotent-payments' },
 								{ label: 'Subscription Billing', slug: 'examples/subscription-billing' },
 								{ label: 'Decision Branching', slug: 'examples/decision-branching' },
+								{ label: 'Enforcing Globally Unique Usernames', slug: 'examples/globally-unique-names' }
 							],
 						},
 						{
@@ -117,6 +118,7 @@ export default defineConfig({
 						{ label: 'Template', slug: 'rest-api/template' },
 						{ label: 'EventStore', slug: 'rest-api/eventstore' },
 						{ label: 'DeReg', slug: 'rest-api/dereg' },
+						{ label: 'Inspections', slug: 'rest-api/inspections' },
 						{ label: 'Query Console', slug: 'rest-api/query' },
 						{ label: 'Health & Info', slug: 'rest-api/health' },
 					],

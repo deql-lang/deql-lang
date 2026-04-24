@@ -63,7 +63,99 @@ This document demonstrates sample data based on the deql  deql-lang/examples/adm
 | 1   | ChangePasswordDecision   | AdminAccount  | ChangePassword  | true      | PasswordChanged                               | encode(digest(:old_password,'sha256'),'hex') = current_hash AND encode(digest(:new_password,'sha256'),'hex') <> current_hash | ```sql SELECT COALESCE(LAST(CASE WHEN event_type = 'PasswordChanged' THEN data.new_password_hash END), LAST(CASE WHEN event_type = 'AdminBootstrapped' THEN data.password_hash END)) AS current_hash FROM DeReg."AdminAccount$Events" WHERE stream_id = :user_id ``` |
 | 2   | LoginAdminDecision       | AdminAccount  | LoginAdmin      | true      | AdminLoginSucceeded, AdminLoginFailed         | None                                                                                                         | ```sql SELECT COALESCE(LAST(CASE WHEN event_type = 'PasswordChanged' THEN data.new_password_hash END), LAST(CASE WHEN event_type = 'AdminBootstrapped' THEN data.password_hash END)) AS current_hash FROM DeReg."AdminAccount$Events" WHERE stream_id = :user_id ```|
 
+**Full SQL row 0**
+```sql
+CREATE DECISION BootstrapAdminDecision
+FOR AdminAccount
+ON COMMAND BootstrapAdmin
+STATE AS
+    SELECT 1 AS existing_flag
+    FROM DeReg."AdminAccount$Events"
+    WHERE stream_id = :user_id
+      AND event_type = 'AdminBootstrapped'
+    LIMIT 1
+EMIT AS
+    SELECT EVENT AdminBootstrapped (
+        username := :username,
+        password_hash := :password_hash
+    )
+    WHERE existing_flag IS NULL;
+```
+**Full sql row 1**
+```sql
+CREATE DECISION ChangePasswordDecision
+FOR AdminAccount
+ON COMMAND ChangePassword
+STATE AS
+    SELECT COALESCE(
+        LAST(CASE WHEN event_type = 'PasswordChanged' THEN data.new_password_hash END),
+        LAST(CASE WHEN event_type = 'AdminBootstrapped' THEN data.password_hash END)
+    ) AS current_hash
+    FROM DeReg."AdminAccount$Events"
+    WHERE stream_id = :user_id
+EMIT AS
+    SELECT EVENT PasswordChanged (
+        new_password_hash := encode(digest(:new_password,'sha256'),'hex')
+    )
+    WHERE encode(digest(:old_password,'sha256'),'hex') = current_hash
+      AND encode(digest(:new_password,'sha256'),'hex') <> current_hash;
+``` 
+**FUll sql row 2**
+```sql
+CREATE DECISION LoginAdminDecision
+FOR AdminAccount
+ON COMMAND LoginAdmin
+STATE AS
+    SELECT COALESCE(
+        LAST(CASE WHEN event_type = 'PasswordChanged' THEN data.new_password_hash END),
+        LAST(CASE WHEN event_type = 'AdminBootstrapped' THEN data.password_hash END)
+    ) AS current_hash
+    FROM DeReg."AdminAccount$Events"
+    WHERE stream_id = :user_id
+EMIT AS
+    BRANCH PasswordMatch
+    SELECT EVENT AdminLoginSucceeded (
+        session_token := encode(digest(CAST(random() AS VARCHAR),'sha256'),'hex'),
+        login_at := ARROW_CAST(CAST(CURRENT_TIMESTAMP AS VARCHAR),'Utf8')
+    )
+    WHERE current_hash IS NOT NULL
+      AND encode(digest(:password,'sha256'),'hex') = current_hash
 
+    UNION ALL
+
+    BRANCH PasswordMismatch
+    SELECT EVENT AdminLoginFailed (
+        attempted_at :=
+```
+
+### Decisions by name
+```
+/api/dereg/decisions/ChangePasswordDecision
+```
+
+| row | name                 | aggregate     | command         | has_guard | emitted_events    | guard_sql                                                                                                                    | state_as_sql |
+|-----|----------------------|---------------|-----------------|-----------|-------------------|-----------------------------------------------------------------------------------------------------------------------------|-------------|
+| 0   | ChangePasswordDecision | AdminAccount  | ChangePassword  | True      | PasswordChanged   | encode(digest(:old_password,'sha256'),'hex') = current_hash AND encode(digest(:new_password,'sha256'),'hex') <> current_hash | SELECT COALESCE(LAST(CASE WHEN event_type = 'PasswordChanged' THEN data.new_password_hash END), LAST(CASE WHEN event_type = 'AdminBootstrapped' THEN data.password_hash END)) AS current_hash FROM DeReg."AdminAccount$Events" WHERE stream_id = :user_id |
+
+**Full SQL**
+```sql
+CREATE DECISION ChangePasswordDecision
+FOR AdminAccount
+ON COMMAND ChangePassword
+STATE AS
+    SELECT COALESCE (
+        LAST ( CASE WHEN event_type = 'PasswordChanged' THEN data . new_password_hash END ) ,
+        LAST ( CASE WHEN event_type = 'AdminBootstrapped' THEN data . password_hash END )
+    ) AS current_hash
+    FROM DeReg . "AdminAccount$Events"
+    WHERE stream_id = :user_id
+EMIT AS
+    SELECT EVENT PasswordChanged (
+        new_password_hash := encode ( digest ( :new_password , 'sha256' ) , 'hex' )
+    )
+    WHERE encode ( digest ( :old_password , 'sha256' ) , 'hex' ) = current_hash
+      AND encode ( digest ( :new_password , 'sha256' ) , 'hex' ) <> current_hash;
+```
 #### Projections
 ```
 /api/dereg/projections
@@ -268,6 +360,35 @@ Index: []
 | 3   | 1                 | LoginAdminDecision  | b_b510cb20ff718432  | 2            | PasswordMismatch   | current_hash IS NULL OR encode(digest(:password,'sha256'),'hex') <> current_hash                              | emitted      | AdminLoginFailed     | ADMIN-001 |
 | 4   | 2                 | LoginAdminDecision  | b_e05bcdb22827fa2e  | 1            | PasswordMatch      | current_hash IS NOT NULL AND encode(digest(:password,'sha256'),'hex') = current_hash                          | guard_failed | None                 | ADMIN-999 |
 | 5   | 2                 | LoginAdminDecision  | b_b510cb20ff718432  | 2            | PasswordMismatch   | current_hash IS NULL OR encode(digest(:password,'sha256'),'hex') <> current_hash                              | emitted      | AdminLoginFailed     | ADMIN-999 |
+
+### All Inspections  
+```
+/api/dereg/inspections
+
+```
+| row | name                   | type     | input_table  | output_table             |
+|-----|------------------------|----------|-------------|--------------------------|
+| 0   | simulated_login_events | Decision | test_logins  | simulated_login_events   |
+
+
+**Full sql**
+INSPECT DECISION LoginAdminDecision
+FROM test_logins
+INTO simulated_login_events;
+### Inspections by name
+```
+/api/dereg/inspections/simulated_login_events
+```
+
+| row | name                   | type     | input_table  | output_table             |
+|-----|------------------------|----------|-------------|--------------------------|
+| 0   | simulated_login_events | Decision | test_logins  | simulated_login_events   |
+
+
+**Full sql**
+INSPECT DECISION LoginAdminDecision
+FROM test_logins
+INTO simulated_login_events;
 
 ## Command execution
 

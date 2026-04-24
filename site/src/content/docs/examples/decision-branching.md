@@ -3,8 +3,6 @@ title: Decision Branching Example
 slug: examples/decision-branching
 ---
 
-# Decision Branching Example
-
 This example demonstrates how to use UNION ALL branching in DeQL decisions to handle multiple mutually exclusive outcomes from a single command. The scenario models a warehouse order fulfillment process, where the outcome depends on available stock.
 
 ## Scenario Overview
