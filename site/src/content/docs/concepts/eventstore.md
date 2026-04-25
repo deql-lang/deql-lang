@@ -3,7 +3,7 @@ title: EVENTSTORE
 description: Durable storage, partitioning, WAL, compaction, and encryption in DeQL.
 ---
 
-An EventStore in DeQL declares the append‑only storage and operational characteristics for events. It is the only infrastructure‑level concept in the language — everything else expresses pure domain logic.
+An EventStore in DeQL declares the append‑only storage and operational characteristics for events. It is the only infrastructure‑level Block in the language — everything else expresses pure domain logic.
 
 :::note
 EventStore defines only the required storage semantics for DeQL events.

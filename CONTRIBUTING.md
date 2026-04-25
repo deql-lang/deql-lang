@@ -4,7 +4,7 @@ Thanks for your interest in contributing to DeQL. This project is in its early s
 
 ## Ways to Contribute
 
-- **Language feedback** — Open an issue if a concept feels unclear, inconsistent, or missing
+- **Language feedback** — Open an issue if a Block feels unclear, inconsistent, or missing
 - **Documentation** — Fix typos, improve explanations, add examples
 - **Examples** — Add new `.deql` example systems that demonstrate real-world patterns
 - **Site improvements** — The docs site lives in `site/` and is built with Astro + Starlight

@@ -1,14 +1,14 @@
 ---
 title: DESCRIBE
-description: Inspect any concept's definition and metadata in the DeQL Decision Registry.
+description: Inspect any block's definition and metadata in the DeQL Decision Registry.
 ---
 
-DESCRIBE lists any concept registered in the DeReg and returns its definition —
+DESCRIBE lists any block registered in the DeReg and returns its definition —
 including DDL, field types, relationships, and metadata.
 
 DeReg stands for **Decision Registry**. It is the registry that holds the compiled DeQL definitions for a system, making the complete model inspectable, exportable, and portable across environments.
 
-DESCRIBE is a structural introspection command: it shows how a concept is
+DESCRIBE is a structural introspection command: it shows how a block is
 defined, not how it behaves at runtime.
 
 ## Purpose
@@ -27,7 +27,7 @@ decisions, replaying events, or executing projections.
 ## Syntax
 
 ```deql
-DESCRIBE <ConceptType> <Name>;
+DESCRIBE <BlockType> <Name>;
 ```
 
 Where `<ConceptType>` is one of: `AGGREGATE`, `COMMAND`, `EVENT`, `DECISION`, `PROJECTION`, `EVENTSTORE`, `TEMPLATE`.
@@ -137,9 +137,9 @@ deql> DESCRIBE TEMPLATE wallet_aggregate;
     Promo         (wallet_name = 'Promo', currency = 'USD')
 ```
 
-## List All Concepts
+## List All Blocks
 
-Use `DESCRIBE` without a name to list all registered concepts of a type:
+Use `DESCRIBE` without a name to list all registered blocks of a type:
 
 ```
 deql> DESCRIBE AGGREGATES;
@@ -170,7 +170,7 @@ deql> DESCRIBE DECISIONS;
 
 ## VALIDATE DEREG
 
-Cross-reference all registered concepts for consistency. This checks that every command has a matching decision, every event is emitted by at least one decision, and all aggregate references resolve:
+Cross-reference all registered blocks for consistency. This checks that every command has a matching decision, every event is emitted by at least one decision, and all aggregate references resolve:
 
 ```deql
 VALIDATE DEREG;
@@ -224,7 +224,7 @@ With `DESCRIBE`, `VALIDATE DEREG`, and `EXPORT DEREG`, the complete set of DeQL 
 | `APPLY` / `USE` | Instantiate a template |
 | `EXECUTE` | Send a command, trigger a decision, get events back |
 | `INSPECT` | Simulate decisions or projections side-effect-free |
-| `DESCRIBE` | Inspect any concept's definition and metadata |
-| `VALIDATE DEREG` | Cross-reference consistency check across all registered concepts |
+| `DESCRIBE` | Inspect any block's definition and metadata |
+| `VALIDATE DEREG` | Cross-reference consistency check across all registered blocks |
 | `EXPORT DEREG` | Dump the Decision Registry as reproducible DeQL |
 | `SELECT` | Query projections, event streams, aggregate state, meta tables |

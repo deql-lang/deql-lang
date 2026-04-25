@@ -151,7 +151,7 @@ VALIDATE DEREG;
 
 ## EXPORT DEREG — Dump Full System
 
-Produces a complete, portable snapshot of every registered concept:
+Produces a complete, portable snapshot of every registered block:
 
 ```deql
 EXPORT DEREG;
@@ -227,7 +227,7 @@ GROUP BY stream_id;
 
 ## What This Demonstrates
 
-- **DESCRIBE** for inspecting any registered concept — aggregates, commands, decisions, projections
+- **DESCRIBE** for inspecting any registered block — aggregates, commands, decisions, projections
 - **VALIDATE DEREG** for consistency checking across the entire system
 - **EXPORT DEREG** for producing a portable, complete system snapshot
 - **Introspection without execution** — understand the system before running anything

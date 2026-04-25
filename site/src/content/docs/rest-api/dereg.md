@@ -1,13 +1,13 @@
 ---
 title: DeReg REST API
-description: Metadata and schema introspection endpoints for registered DeQL concepts.
+description: Metadata and schema introspection endpoints for registered DeQL blocks.
 ---
 
 The DeReg API exposes registered schema metadata using read-only Arrow IPC endpoints.
 
 DeReg stands for **Decision Registry**. It is the registry of compiled DeQL definitions for a system: aggregates, commands, events, decisions, projections, templates, and event stores. Because DeReg can be exported and then loaded into another environment, it is also the portability layer for moving a DeQL system definition across environments.
 
-## Concept Collections
+## Block Collections
 
 | Method | Route |
 |---|---|
@@ -45,7 +45,7 @@ DeReg stands for **Decision Registry**. It is the registry of compiled DeQL defi
 ## Behavior
 
 - All responses are Arrow IPC unless an execution layer error is returned as JSON.
-- Unknown concept groups or sub-resources return `404`.
+- Unknown block groups or sub-resources return `404`.
 - Invalid names return `400`.
 - Single-row lookups return `404` if no rows are found.
 

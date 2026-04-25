@@ -20,9 +20,9 @@ The demo walks through realistic subscriber scenarios:
 - Bob (SUB-002): enterprise user with roaming across EU and APAC
 - CORP-001: shared corporate pool with employee charges
 
-## Concepts Covered
+## Blocks Covered
 
-| Concept | What it does in this demo |
+| Block | What it does in this demo |
 |---|---|
 | TEMPLATE | `wallet_aggregate` — top-up/debit pattern with currency parameter |
 | APPLY TEMPLATE | 7 instantiations showing incremental product growth |

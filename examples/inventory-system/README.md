@@ -15,9 +15,9 @@ APPLY TEMPLATE StockItem WITH (Category = 'Tool');
 APPLY TEMPLATE StockItem WITH (Category = 'Material');
 ```
 
-## Concepts Covered
+## Blocks Covered
 
-| Concept | What it does in this demo |
+| Block | What it does in this demo |
 |---|---|
 | TEMPLATE | `StockItem` — reusable lifecycle pattern for any stock category |
 | APPLY TEMPLATE | Instantiate for Fastener, Tool, Material (39 definitions from 3 lines) |

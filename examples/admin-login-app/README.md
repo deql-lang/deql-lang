@@ -312,9 +312,9 @@ Canonical text format: `{decision}:{index}:{rule_name}:{guard_sql}:{EventType(fi
 
 Branch IDs are stable across runs and independent of input data — they depend only on the decision definition.
 
-## Concepts Covered
+## Blocks Covered
 
-| Concept | What it does in this demo |
+| Block | What it does in this demo |
 |---|---|
 | `UNION ALL` branching | Single decision, two branches — success and failure |
 | `BRANCH` labels | `PasswordMatch` / `PasswordMismatch` — descriptive only |

@@ -3,7 +3,7 @@ title: "Employee Domain — Getting Started"
 description: "A complete walkthrough of DeQL fundamentals: aggregate, commands, events, guarded decisions, and projections."
 ---
 
-A step-by-step introduction to DeQL using an Employee domain. Covers every core concept: aggregate boundaries, commands, events, guarded decisions, and projections.
+A step-by-step introduction to DeQL using an Employee domain. Covers every core Block: aggregate boundaries, commands, events, guarded decisions, and projections.
 
 ## Domain
 

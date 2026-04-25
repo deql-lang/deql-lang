@@ -99,5 +99,5 @@ VALIDATE DEREG;
 -- EXPORT DEREG — dump the full system definition
 -- ============================================================
 
--- Produces a complete, portable snapshot of every registered concept.
+-- Produces a complete, portable snapshot of every registered block.
 EXPORT DEREG;

@@ -3,7 +3,7 @@ title: DECISION
 description: "STATE AS, EMIT AS, guards, branching with UNION ALL, and multi-state queries across aggregates in DeQL."
 ---
 
-A Decision is the central executable unit in DeQL. It is the only concept that runs at runtime. A decision binds a command, aggregate state, and business rules into a deterministic outcome — producing events or rejecting the command.
+A Decision is the central executable unit in DeQL. It is the only Block that runs at runtime. A decision binds a command, aggregate state, and business rules into a deterministic outcome — producing events or rejecting the command.
 
 ## Purpose
 

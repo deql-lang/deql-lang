@@ -22,7 +22,7 @@ This section describes the HTTP contract exposed by a DeQL runtime. Deployment a
 | Group | Purpose |
 |---|---|
 | `/health`, `/info` | Liveness and runtime metadata |
-| `/api/dereg/...` | Metadata and schema introspection for registered DeQL concepts |
+| `/api/dereg/...` | Metadata and schema introspection for registered DeQL blocks |
 | `/api/aggregates/...` | Aggregate state, event streams, inspect tables, and command execution |
 | `/api/projections/{name}/query` | Execute a registered projection query |
 | `/api/deql/export` | Export the registered schema as DeQL text |
@@ -31,13 +31,13 @@ This section describes the HTTP contract exposed by a DeQL runtime. Deployment a
 
 ## Security and Validation Defaults
 
-- Aggregate, command, projection, and concept names are validated as identifiers.
+- Aggregate, command, projection, and block names are validated as identifiers.
 - `/api/query` accepts only read-only `SELECT` or `WITH` SQL.
 - `/api/deql/create` accepts only DeQL `CREATE` statements.
 - Command execution is aggregate-scoped and checks that the command resolves to a decision for that aggregate.
 - Read-only mode blocks mutating operations.
 
-## Concept Mapping
+## Block Mapping
 
 - Aggregates: state and event access under `/api/aggregates/...`
 - Commands: executed through `/api/aggregates/{agg}/execute/{command}`
@@ -57,8 +57,8 @@ The same DeQL operations are available via the interactive CLI and via the HTTP 
 | Query a projection | `SELECT * FROM DeReg."AccountBalance"` | `GET /api/projections/{name}/query` |
 | Run arbitrary SQL | `SELECT ...` (interactive session) | `POST /api/query` with `{ "sql": "..." }` |
 | Export schema | `EXPORT DEREG;` | `GET /api/deql/export` |
-| Define new concepts | `CREATE AGGREGATE ...` etc. | `POST /api/deql/create` with DeQL text |
-| Inspect a concept | `DESCRIBE DECISION DepositFunds;` | `GET /api/dereg/decisions/{name}` |
+| Define new blocks | `CREATE AGGREGATE ...` etc. | `POST /api/deql/create` with DeQL text |
+| Inspect a block | `DESCRIBE DECISION DepositFunds;` | `GET /api/dereg/decisions/{name}` |
 | List all aggregates | `DESCRIBE AGGREGATES;` | `GET /api/dereg/aggregates` |
 | Validate registry | `VALIDATE DEREG;` | — (CLI only) |
 | Inspect inspect tables | `INSPECT DECISION Hire FROM ...` | `GET /api/aggregates/{agg}/inspect/{table}` |

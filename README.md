@@ -82,11 +82,11 @@ Decisions define how reality changes.
 
 ***
 
-## Concept Model
+## Block Model
 
 DeQL separates domain definitions from execution.
 
-Declarative Concepts (non‑executable, reusable):
+Declarative Blocks (non‑executable, reusable):
 
 *   **AGGREGATE** — Defines a consistency boundary for event‑sourced state.
 *   **COMMAND** — Describes external intent entering the system. Sent via `EXECUTE`.
@@ -95,11 +95,11 @@ Declarative Concepts (non‑executable, reusable):
 *   **TEMPLATE** — Enables reusable, compile‑time domain patterns.
 *   **EVENTSTORE** — Declares the physical storage for events.
 
-Executable Concept:
+Executable Block:
 
 *   **DECISION** — The central executable unit that binds commands, state, and business rules into a deterministic outcome.
 
-All concepts are registered in the **DeReg** (Decision Registry). Use `DESCRIBE` to inspect any concept, `VALIDATE DEREG` for consistency checks, and `EXPORT DEREG` to dump the full system definition.
+All blocks are registered in the **DeReg** (Decision Registry). Use `DESCRIBE` to inspect any block, `VALIDATE DEREG` for consistency checks, and `EXPORT DEREG` to dump the full system definition.
 
 ***
 

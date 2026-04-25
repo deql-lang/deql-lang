@@ -2,7 +2,7 @@
 
 A government digital registry platform inspired by the [Daksha-RC](https://daksha-rc.github.io/daksha-rc-core/daksha-rc-registry.html) pattern. Registries manage entities (citizens, schools, facilities, vehicles, land parcels) through a standard lifecycle.
 
-## The Registry Concept
+## The Registry Block
 
 Every registry entity — regardless of its domain — follows the same lifecycle:
 
@@ -35,9 +35,9 @@ The demo starts with 3 registries (Citizen, School, HealthFacility), then shows 
 Final state: 5 registries, 50 definitions, all from 1 template.
 
 
-## Concepts Covered
+## Blocks Covered
 
-| Concept | What it does in this demo |
+| Block | What it does in this demo |
 |---|---|
 | TEMPLATE | `RegistryEntity` — lifecycle pattern with `{{Fields}}` and `{{FieldsAssignments}}` |
 | APPLY TEMPLATE | 5 instantiations showing incremental system growth |

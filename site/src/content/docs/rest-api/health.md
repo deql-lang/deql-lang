@@ -45,4 +45,4 @@ Response shape:
 
 - Deployment health checks
 - Smoke verification that the correct runtime has started
-- Quick visibility into read-only mode and concept registration counts
+- Quick visibility into read-only mode and block registration counts

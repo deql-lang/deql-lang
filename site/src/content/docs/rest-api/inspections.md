@@ -19,7 +19,7 @@ Response formats
 
 Schema (columns returned)
 - `name` (STRING): the inspection output table name (the `INTO` table from the `INSPECT` statement).
-- `kind` (STRING): either `Decision` or `Projection` — the kind of inspected concept.
+- `kind` (STRING): either `Decision` or `Projection` — the kind of inspected block.
 - `input_table` (STRING, nullable): the `FROM` table used as input to the inspection.
 - `output_table` (STRING): same as `name` — the `INTO` table where results were registered.
 - `full_sql` (STRING, nullable): the canonical SQL text recorded for the inspection. For decision/projection inspections this contains the original `INSPECT ...` statement that produced the record (for example: `INSPECT DECISION LoginAdminDecision FROM test_logins INTO simulated_login_events;`).
