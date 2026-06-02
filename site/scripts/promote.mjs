@@ -94,6 +94,12 @@ console.log(`  Copied:  concepts/ (${conceptsCount} files)`);
 const examplesCount = copyDirRecursive(join(DOCS_ROOT, 'examples'), join(versionDir, 'examples'));
 console.log(`  Copied:  examples/ (${examplesCount} files)`);
 
+// Clone rest-api/
+const restApiSrc = join(DOCS_ROOT, 'rest-api');
+if (existsSync(restApiSrc)) {
+  const restApiCount = copyDirRecursive(restApiSrc, join(versionDir, 'rest-api'));
+  console.log(`  Copied:  rest-api/ (${restApiCount} files)`);
+}
 // ─── Index Page Generation ───────────────────────────────────────────────────
 
 function generateIndex() {
@@ -132,6 +138,16 @@ function generateIndex() {
     const slug = f.replace(/\.(md|mdx)$/, '');
     const label = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     lines.push(`- [${label}](/${getBase()}${folderName}/examples/${slug}/)`);
+  }
+
+  // REST API
+  if (existsSync(join(versionDir, 'rest-api'))) {
+    lines.push('', '### REST API', '');
+    for (const f of readdirSync(join(versionDir, 'rest-api')).filter(isDocFile).sort()) {
+      const slug = f.replace(/\.(md|mdx)$/, '');
+      const label = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      lines.push(`- [${label}](/${getBase()}${folderName}/rest-api/${slug}/)`);
+    }
   }
 
   writeFileSync(join(versionDir, 'index.md'), lines.join('\n') + '\n');

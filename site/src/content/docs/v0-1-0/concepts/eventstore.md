@@ -5,7 +5,7 @@ banner:
   content: '<span>You are viewing docs for v0.1.0. <a href="/deql-lang/">Switch to latest</a></span>'
 ---
 
-An EventStore in DeQL declares the append‑only storage and operational characteristics for events. It is the only infrastructure‑level concept in the language — everything else expresses pure domain logic.
+An EventStore in DeQL declares the append‑only storage and operational characteristics for events. It is the only infrastructure‑level Block in the language — everything else expresses pure domain logic.
 
 :::note
 EventStore defines only the required storage semantics for DeQL events.

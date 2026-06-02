@@ -5,8 +5,6 @@ banner:
   content: '<span>You are viewing docs for v0.1.0. <a href="/deql-lang/">Switch to latest</a></span>'
 ---
 
-# Decision Branching Example
-
 This example demonstrates how to use UNION ALL branching in DeQL decisions to handle multiple mutually exclusive outcomes from a single command. The scenario models a warehouse order fulfillment process, where the outcome depends on available stock.
 
 ## Scenario Overview
@@ -91,4 +89,3 @@ SELECT * FROM simulated_order_events__branches;
 
 This pattern is useful for any scenario where a command can have multiple mutually exclusive outcomes, and you want to record each as a first-class event.
 
-See the full script in [`decision-branching.deql`](../../../../examples/decision-branching.deql).

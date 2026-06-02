@@ -5,7 +5,7 @@ banner:
   content: '<span>You are viewing docs for v0.1.0. <a href="/deql-lang/">Switch to latest</a></span>'
 ---
 
-A Decision is the central executable unit in DeQL. It is the only concept that runs at runtime. A decision binds a command, aggregate state, and business rules into a deterministic outcome — producing events or rejecting the command.
+A Decision is the central executable unit in DeQL. It is the only Block that runs at runtime. A decision binds a command, aggregate state, and business rules into a deterministic outcome — producing events or rejecting the command.
 
 ## Purpose
 

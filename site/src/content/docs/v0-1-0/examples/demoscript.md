@@ -5,7 +5,7 @@ banner:
   content: '<span>You are viewing docs for v0.1.0. <a href="/deql-lang/">Switch to latest</a></span>'
 ---
 
-A step-by-step introduction to DeQL using an Employee domain. Covers every core concept: aggregate boundaries, commands, events, guarded decisions, and projections.
+A step-by-step introduction to DeQL using an Employee domain. Covers every core Block: aggregate boundaries, commands, events, guarded decisions, and projections.
 
 ## Domain
 

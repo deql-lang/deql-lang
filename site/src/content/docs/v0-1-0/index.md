@@ -27,6 +27,7 @@ description: "Frozen documentation snapshot for DeQL v0.1.0"
 
 ### Examples
 
+- [Admin Login App Rest Api](/deql-lang/v0-1-0/examples/admin-login-app-rest-api/)
 - [Admin Login App](/deql-lang/v0-1-0/examples/admin-login-app/)
 - [Approval Workflow](/deql-lang/v0-1-0/examples/approval-workflow/)
 - [Audit Trail](/deql-lang/v0-1-0/examples/audit-trail/)
@@ -34,6 +35,7 @@ description: "Frozen documentation snapshot for DeQL v0.1.0"
 - [Decision Branching](/deql-lang/v0-1-0/examples/decision-branching/)
 - [Demoscript](/deql-lang/v0-1-0/examples/demoscript/)
 - [Describe And Validate](/deql-lang/v0-1-0/examples/describe-and-validate/)
+- [Globally Unique Names](/deql-lang/v0-1-0/examples/globally-unique-names/)
 - [Idempotent Payments](/deql-lang/v0-1-0/examples/idempotent-payments/)
 - [Inspect Demo](/deql-lang/v0-1-0/examples/inspect-demo/)
 - [Inspect Projection](/deql-lang/v0-1-0/examples/inspect-projection/)
@@ -42,3 +44,18 @@ description: "Frozen documentation snapshot for DeQL v0.1.0"
 - [Registry System](/deql-lang/v0-1-0/examples/registry-system/)
 - [Subscription Billing](/deql-lang/v0-1-0/examples/subscription-billing/)
 - [Telecom Wallet](/deql-lang/v0-1-0/examples/telecom-wallet/)
+
+### REST API
+
+- [Aggregate](/deql-lang/v0-1-0/rest-api/aggregate/)
+- [Command](/deql-lang/v0-1-0/rest-api/command/)
+- [Decision](/deql-lang/v0-1-0/rest-api/decision/)
+- [Dereg](/deql-lang/v0-1-0/rest-api/dereg/)
+- [Event](/deql-lang/v0-1-0/rest-api/event/)
+- [Eventstore](/deql-lang/v0-1-0/rest-api/eventstore/)
+- [Health](/deql-lang/v0-1-0/rest-api/health/)
+- [Index](/deql-lang/v0-1-0/rest-api/index/)
+- [Inspections](/deql-lang/v0-1-0/rest-api/inspections/)
+- [Projection](/deql-lang/v0-1-0/rest-api/projection/)
+- [Query](/deql-lang/v0-1-0/rest-api/query/)
+- [Template](/deql-lang/v0-1-0/rest-api/template/)
