@@ -4,14 +4,17 @@
   "version": "0.0.1",
   "packageManager": "yarn@4.14.1",
   "scripts": {
+    "predev": "node scripts/gen-versions.mjs",
     "dev": "astro dev",
     "start": "astro dev",
+    "prebuild": "node scripts/gen-versions.mjs",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "promote": "node scripts/promote.mjs"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.38.3",
+    "@astrojs/starlight": "^0.39.2",
     "@pasqal-io/starlight-client-mermaid": "^0.1.0",
     "asciinema-player": "^3.15.1",
     "astro": "^6.0.1",

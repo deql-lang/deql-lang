@@ -1,0 +1,12 @@
+{
+  "versions": [
+    {
+      "label": "latest",
+      "value": ""
+    },
+    {
+      "label": "v0.1.0",
+      "value": "v0-1-0"
+    }
+  ]
+}

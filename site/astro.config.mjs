@@ -123,6 +123,12 @@ export default defineConfig({
 						{ label: 'Health & Info', slug: 'rest-api/health' },
 					],
 				},
+				{
+					label: 'Versions',
+					items: [
+						{ label: 'v0.1.0', link: '/v0-1-0/' },
+					],
+				},
 			],
 		}),
 	],
