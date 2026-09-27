@@ -1,56 +1,64 @@
 ---
 title: Inspections REST API
-description: Endpoints for listing and describing runtime-recorded inspections
+description: Runtime inspection endpoints for simulating decision/projection execution and inspecting results.
 ---
 
-# Inspections REST API
+The inspections API exposes endpoints for running and managing inspection operations. Inspections simulate the execution of decisions or projections against provided data without modifying the system state. All routes are scoped within an organization via the `{{org_id}}` path parameter.
 
-Summary
-- The Inspections endpoints expose runtime-recorded inspection metadata created when an `INSPECT` statement runs (REPL/CLI). These endpoints do not trigger inspections — they only surface the records produced by prior `INSPECT` runs.
+## Overview
 
-Endpoints
-- `GET /api/dereg/inspections` — list all recorded inspections.
-- `GET /api/dereg/inspections/{inspectionname}` — get one inspection by name.
-- Compatibility: `/api/dereg/inspection/{inspectionname}` is also accepted for compatibility with singular-path clients.
+| Method | Route |
+|---|---|
+| `GET` | `/api/{{org_id}}/deql/inspect/status` |
+| `POST` | `/api/{{org_id}}/deql/inspect/{name}/validate` |
+| `GET` | `/api/{{org_id}}/deql/inspect/decision` |
+| `GET` | `/api/{{org_id}}/deql/inspect/{name}` |
+| `POST` | `/api/{{org_id}}/deql/inspect/{name}/start` |
+| `POST` | `/api/{{org_id}}/deql/inspect/{name}/stop` |
+| `DELETE` | `/api/{{org_id}}/deql/inspect/{name}/outputs` |
+| `DELETE` | `/api/{{org_id}}/deql/inspect/outputs` |
+| `GET` | `/api/{{org_id}}/deql/inspect/{name}/outputs` |
+| `GET` | `/api/{{org_id}}/deql/inspect/outputs` |
+| `POST` | `/api/{{org_id}}/deql/inspect/run` |
 
-Response formats
-- Primary: `application/vnd.apache.arrow.stream` — the server serializes tabular results as Arrow IPC for efficient clients.
-- Fallback/status: JSON for simple status responses or errors (e.g. 404 Not Found).
+## Inspection Operations
 
-Schema (columns returned)
-- `name` (STRING): the inspection output table name (the `INTO` table from the `INSPECT` statement).
-- `kind` (STRING): either `Decision` or `Projection` — the kind of inspected block.
-- `input_table` (STRING, nullable): the `FROM` table used as input to the inspection.
-- `output_table` (STRING): same as `name` — the `INTO` table where results were registered.
-- `full_sql` (STRING, nullable): the canonical SQL text recorded for the inspection. For decision/projection inspections this contains the original `INSPECT ...` statement that produced the record (for example: `INSPECT DECISION LoginAdminDecision FROM test_logins INTO simulated_login_events;`).
+### Start Inspection
 
-Examples
-- List all inspections (prefer Arrow-capable client):
+POST to `/api/{{org_id}}/deql/inspect/{name}/start` to begin execution of a previously defined inspection. The inspection runs in the background and creates in-memory output tables.
 
- 
-- Get a single inspection (JSON fallback):
- 
-Sample JSON row (for readability)
+### Stop Inspection
 
-```json
-{
-  "name": "simulated_login_events",
-  "kind": "Decision",
-  "input_table": "test_logins",
-  "output_table": "simulated_login_events",
-  "full_sql": "INSPECT DECISION LoginAdminDecision FROM test_logins INTO simulated_login_events;"
-}
-```
+POST to `/api/{{org_id}}/deql/inspect/{name}/stop` to halt a running inspection. Output tables remain available for querying.
 
-Validation and authorization
-- Path parameters are validated using the server's `validate_identifier` rules — callers should only use safe ASCII identifier names.
-- Access to the `meta_inspections` resource is governed by the server's meta-table authorization rules; check your deployment's authorization matrix for who may read inspection metadata.
+### Drop Outputs
 
-Notes and client guidance
-- The REST API surfaces inspection records that were created by running `INSPECT` (CLI/REPL). To create a new inspection, run `INSPECT` in the CLI or via tooling that has permission to execute DeQL statements — the REST endpoints will then show the recorded inspection.
-- The `full_sql` field now contains the original `INSPECT` statement text (not the generated `CREATE` text for the underlying decision/projection), making it easier to display the exact command a user executed.
-- Clients that can consume Arrow IPC should prefer the Arrow content-type for performance and fidelity; otherwise request JSON for status/error bodies.
+DELETE to `/api/{{org_id}}/deql/inspect/{name}/outputs` to remove output tables. Use `/api/{{org_id}}/deql/inspect/outputs?table=<name>` for global table cleanup.
 
-See also
-- REST API overview: /docs/rest-api/index.md
-- INSPECT reference (CLI): /docs/inspection
+### Status
+
+GET to `/api/{{org_id}}/deql/inspect/status` to check the current running inspection and its metrics.
+
+## Validation
+
+POST to `/api/{{org_id}}/deql/inspect/{name}/validate` to verify preconditions before running an inspection.
+
+## List Inspections
+
+- `/api/{{org_id}}/deql/inspect/decision` returns all registered inspection definitions
+- `/api/{{org_id}}/deql/inspect/outputs` returns all output tables
+- `/api/{{org_id}}/deql/inspect/{name}/outputs` returns output tables for a specific inspection
+
+## Ephemeral Execution
+
+POST to `/api/{{org_id}}/deql/inspect/run` with DeQL `INSPECT` text to execute an inline inspection without persisting the definition. Output tables exist only during the current session.
+
+## Response Format
+
+- All responses return JSON
+- Status and error responses return JSON
+- Pagination is available via `limit` and `offset` query parameters
+
+## Concurrency
+
+Only one inspection can run per organization at a time. Attempting to start a new inspection while another is running returns `409 Conflict`.

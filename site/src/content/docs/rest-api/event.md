@@ -1,52 +1,37 @@
 ---
 title: Event REST API
-description: Event access patterns in the REST API.
+description: Event stream access patterns and event metadata.
 ---
 
-Events are exposed in two ways:
-
-1. Runtime event streams under aggregate-scoped endpoints
-2. Event metadata through `/api/dereg/events...`
-
-## Runtime Event Stream
-
-| Method | Route |
-|---|---|
-| `GET` | `/api/aggregates/{agg}/events` |
-| `GET` | `/api/aggregates/{agg}/events/{stream_id}` |
-
-These endpoints return Arrow IPC rows from `DeReg."{agg}$Events"`.
-
-Typical event columns include:
-
-- stream identity
-- sequence number
-- event type
-- event payload data
+Events are accessible through two approaches: runtime event streams and event metadata. All routes are scoped within an organization via the `{{org_id}}` path parameter.
 
 ## Event Metadata
 
 | Method | Route |
 |---|---|
-| `GET` | `/api/dereg/events` |
-| `GET` | `/api/dereg/events/{name}` |
-| `GET` | `/api/dereg/events/{name}/fields` |
+| `GET` | `/api/{{org_id}}/deql/aggregates/{agg}/events` |
 
-These endpoints return event-definition metadata.
+
+These endpoints return deql used to create the event
+
+### Typical Event Fields
+
+- `_stream_id`: stream identity
+- `_sequence_number`: event sequence number
+- `_event_type`: event type
+- `_payload`: event data
+
+These endpoints return event definition metadata.
 
 ## Creating Events
 
-Event definitions can be registered through the optional schema API:
-
 | Method | Route |
 |---|---|
-| `POST` | `/api/deql/create` |
+| `POST` | `/api/{{org_id}}/dereg/definitions` |
 
-Requirements:
-
-- Request contains a DeQL `CREATE EVENT ...` statement
+Request body contains a DeQL `CREATE EVENT` statement.
 
 ## Notes
 
-- There is no direct `POST /api/events` endpoint.
-- Event emission happens as a side effect of command execution through decisions.
+- There is no direct event creation endpoint.
+- Event emission occurs as a side effect of command execution.

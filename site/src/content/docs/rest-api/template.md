@@ -1,9 +1,9 @@
 ---
 title: Template REST API
-description: Template metadata and schema creation behavior.
+description: Template metadata and schema creation endpoints.
 ---
 
-Templates are exposed through metadata endpoints and can be registered through the schema API. There is no dedicated HTTP endpoint for `APPLY TEMPLATE` at this time.
+Template endpoints provide metadata about registered templates and allow registration through the schema API.
 
 ## Template Metadata
 
@@ -14,23 +14,16 @@ Templates are exposed through metadata endpoints and can be registered through t
 | `GET` | `/api/dereg/templates/{name}/params` |
 | `GET` | `/api/dereg/templates/{name}/instances` |
 
-These routes return Arrow IPC backed by:
-
-- template definitions
-- template parameters
-- recorded template instantiations
+These endpoints return template definitions, parameters, and instantiation records.
 
 ## Creating Templates
 
-Use the optional schema API:
-
 | Method | Route |
 |---|---|
-| `POST` | `/api/deql/create` |
+| `POST` | `/api/dereg/definitions` |
 
-with a DeQL `CREATE TEMPLATE ...` statement.
+Request body contains a DeQL `CREATE TEMPLATE` statement.
 
 ## Notes
 
-- The current schema API validates only `CREATE ...` statements.
-- Template application remains a DeQL/runtime operation rather than a standalone REST route.
+- Template application is a DeQL runtime operation, not exposed as a separate HTTP endpoint.

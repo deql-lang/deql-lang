@@ -1,13 +1,21 @@
 ---
 title: DeReg REST API
-description: Metadata and schema introspection endpoints for registered DeQL blocks.
+description: Registry endpoints for managing and querying DeQL concepts.
 ---
 
-The DeReg API exposes registered schema metadata using read-only Arrow IPC endpoints.
+The DeReg API provides endpoints for managing and querying the DeQL concept registry. Use these endpoints to register new concepts, inspect registered definitions, and retrieve registry metadata.
 
-DeReg stands for **Decision Registry**. It is the registry of compiled DeQL definitions for a system: aggregates, commands, events, decisions, projections, templates, and event stores. Because DeReg can be exported and then loaded into another environment, it is also the portability layer for moving a DeQL system definition across environments.
+## Overview
 
-## Block Collections
+| Method | Route |
+|---|---|
+| `POST` | `/api/dereg/definitions` |
+| `GET` | `/api/dereg/metrics` |
+| `POST` | `/api/dereg/admin/replay` |
+| `POST` | `/api/dereg/admin/replay-refresh` |
+| `POST` | `/api/dereg/admin/validate` |
+
+## Concept Metadata
 
 | Method | Route |
 |---|---|
@@ -19,7 +27,7 @@ DeReg stands for **Decision Registry**. It is the registry of compiled DeQL defi
 | `GET` | `/api/dereg/templates` |
 | `GET` | `/api/dereg/eventstores` |
 
-## Single-Definition Lookups
+## Single Concept Lookup
 
 | Method | Route |
 |---|---|
@@ -31,7 +39,7 @@ DeReg stands for **Decision Registry**. It is the registry of compiled DeQL defi
 | `GET` | `/api/dereg/templates/{name}` |
 | `GET` | `/api/dereg/eventstores/{name}` |
 
-## Detail Endpoints
+## Schema Endpoints
 
 | Method | Route |
 |---|---|
@@ -44,19 +52,27 @@ DeReg stands for **Decision Registry**. It is the registry of compiled DeQL defi
 
 ## Behavior
 
-- All responses are Arrow IPC unless an execution layer error is returned as JSON.
-- Unknown block groups or sub-resources return `404`.
-- Invalid names return `400`.
-- Single-row lookups return `404` if no rows are found.
+- All responses return JSON
+- Unknown concepts or sub-resources return `404 Not Found`
+- Invalid identifiers return `400 Bad Request`
+- Single-item lookups return `404 Not Found` when no matching item exists
 
-## Internal Mapping
+## Registry Operations
 
-These routes are backed by DeReg meta tables such as:
+### Register Concepts
 
-- aggregate definitions and fields
-- command definitions and fields
-- event definitions and fields
-- decision definitions and emitted-event metadata
-- projection definitions
-- template definitions, parameters, and instances
-- event store definitions
+POST to `/api/dereg/definitions` with DeQL `CREATE` statements in plain text. Each statement creates or replaces a concept in the registry.
+
+### Validation
+
+- `/api/dereg/admin/replay` performs read-only validation of definitions
+- `/api/dereg/admin/validate` returns a structured validation report
+
+### Refresh
+
+- `/api/dereg/admin/replay-refresh` rebuilds projections and requires exclusive access during operation
+
+## Response Format
+
+- Success responses return JSON
+- Error responses return JSON with a single `error` field containing a human-readable message

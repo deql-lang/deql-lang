@@ -1,54 +1,35 @@
 ---
 title: Decision REST API
-description: How decisions are surfaced in the HTTP API.
+description: Decision metadata and indirect execution through commands.
 ---
 
-Decisions do not currently have a standalone execution endpoint. They are surfaced indirectly through command execution and directly through metadata endpoints.
+Decisions are executed indirectly through command execution or via inspection workflows. They do not have standalone execution endpoints.
 
-## Decision Metadata
+## Command Execution
 
-| Method | Route |
-|---|---|
-| `GET` | `/api/dereg/decisions` |
-| `GET` | `/api/dereg/decisions/{name}` |
-| `GET` | `/api/dereg/decisions/{name}/emits` |
+When a command is posted to:
 
-These endpoints return Arrow IPC from:
-
-- `meta_decisions`
-- `meta_decision_emits`
-
-## Decision Execution Model
-
-Decisions are executed indirectly when a command is posted to:
-
-```text
-POST /api/aggregates/{agg}/execute/{command}
+```
+POST /api/{org_id}/deql/{aggregate}/{command}
 ```
 
-The server:
+The system:
 
-1. Resolves the command to a registered decision
-2. Confirms that decision belongs to `{agg}`
-3. Executes the resulting `EXECUTE` statement
+1. Resolves the command to its associated decision
+2. Validates the decision belongs to the aggregate
+3. Executes the decision with the command parameters
+4. Persists any emitted events
 
 ## Creating Decisions
 
-Decisions can be registered through the optional schema API:
-
 | Method | Route |
 |---|---|
-| `POST` | `/api/deql/create` |
+| `POST` | `/api/{{org_id}}/dereg/definitions` |
 
-Payload example:
-
-```json
-{
-  "deql": "CREATE DECISION Promote FOR Employee ON COMMAND PromoteEmployee EMIT AS SELECT EVENT EmployeePromoted (new_grade := :new_grade);"
-}
-```
+Request body contains a DeQL `CREATE DECISION` statement.
 
 ## Notes
 
-- There is no standalone `POST /api/decisions/{name}/execute` route.
-- Inspect workflows are exposed through aggregate inspect table endpoints, not direct decision HTTP endpoints.
+- Decisions are not directly executable via HTTP
+- Decision execution is always tied to a command
+- Inspection workflows access decision behavior indirectly through their output tables

@@ -1,35 +1,21 @@
 ---
-title: Health and Info REST API
-description: Always-on operational endpoints for liveness and runtime metadata.
+title: Info REST API
+description: Runtime metadata endpoint for monitoring deployment status.
 ---
 
-These endpoints are always available when the HTTP server is running.
-
-## Health
+## Runtime Information
 
 | Method | Route |
 |---|---|
-| `GET` | `/health` |
+| `GET` | `/api/{{org_id}}/deql/info` |
 
-Response:
-
-```json
-{ "status": "ok" }
-```
-
-## Info
-
-| Method | Route |
-|---|---|
-| `GET` | `/info` |
-
-Response shape:
+### Response
 
 ```json
 {
   "version": "...",
   "readonly": false,
-  "concept_counts": {
+  "counts": {
     "aggregates": 0,
     "commands": 0,
     "events": 0,
@@ -41,8 +27,8 @@ Response shape:
 }
 ```
 
-## Uses
+## Usage
 
 - Deployment health checks
-- Smoke verification that the correct runtime has started
-- Quick visibility into read-only mode and block registration counts
+- Smoke verification that the runtime has started
+- Quick visibility into concept registration counts

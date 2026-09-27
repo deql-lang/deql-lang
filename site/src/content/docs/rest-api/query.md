@@ -1,43 +1,47 @@
 ---
 title: Query Console REST API
-description: Optional read-only SQL console exposed at /api/query.
+description: Optional read-only SQL console for debugging and exploration.
 ---
 
-The query console is an optional development endpoint.
+The query console is an optional endpoint for executing read-only SQL queries.
 
 ## Availability
 
-This route may be deployment-dependent and can be omitted by conservative runtime configurations.
+This route may be deployment-dependent and can be disabled in conservative runtime configurations.
 
-## Route
+## Query Execution
 
 | Method | Route |
 |---|---|
 | `POST` | `/api/query` |
 
-Request body:
+### Request Body
 
 ```json
 {
-  "sql": "SELECT * FROM \"dereg\".\"Employee$Events\";"
+  "sql": "SELECT * FROM event_stream;"
 }
 ```
 
-## Validation Rules
+### Validation Rules
 
-- SQL must start with `SELECT` or `WITH`
-- Mutation keywords are rejected even if they appear later in the text
-- On success, result batches are returned as Arrow IPC
+- SQL must begin with `SELECT` or `WITH`
+- Mutation keywords are rejected
 
-## Errors
+### Response Format
+
+- Tabular results return as JSON arrays
+- Errors return JSON with an `error` field
+
+## Error Responses
 
 | Status | Meaning |
 |---|---|
-| `403` | Non-read-only SQL was supplied |
-| `404` | Route not registered or not available in the current deployment |
-| `500` | Query execution or IPC serialization failure |
+| `403` | Non-read-only SQL was provided |
+| `404` | Route not available in current deployment |
+| `500` | Query execution or serialization failure |
 
 ## Notes
 
-- This endpoint is intended for debugging, exploration, and lightweight integrations.
-- It is not the primary path for schema mutation or command execution.
+- This endpoint is intended for debugging and exploration
+- Not the primary path for schema mutation or command execution

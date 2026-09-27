@@ -1,100 +1,31 @@
 ---
 title: Aggregate REST API
-description: Aggregate state, event stream, and inspect endpoints.
+description: Aggregate state and event access endpoints.
 ---
 
-Aggregate APIs expose both derived state and raw event history for a registered aggregate.
+Aggregate endpoints expose both current derived state and event history for registered aggregates. All routes are scoped within an organization via the `{{org_id}}` path parameter.
 
-## State Endpoints
+## State Queries
 
-### List aggregate state
+### List Aggregate State
 
 | Method | Route |
 |---|---|
-| `GET` | `/api/aggregates/{agg}` |
+| `GET` | `/api/{{org_id}}/deql/aggregates/{agg}/agg` |
 
 Query parameters:
 
-- `limit` optional, default `1000`
-- `offset` optional, default `0`
+- `aggregate_id` optional, filter to a single aggregate instance
+- `from` optional, pagination offset (default 0)
+- `size` optional, page size (default 100, maximum 10000)
 
-Behavior:
+Returns the folded current state of aggregate instances.
 
-- Validates `{agg}` as an identifier
-- Returns `404` if the aggregate is not registered
-- Returns Arrow IPC rows from `DeReg."{agg}$Agg"`
-
-Example:
-
-```bash
-GET /api/aggregates/Employee
-```
-
-### Fetch one aggregate instance
+### Fetch Single Instance
 
 | Method | Route |
 |---|---|
-| `GET` | `/api/aggregates/{agg}/{id}` |
+| `GET` | `/api/{{org_id}}/deql/aggregates/{agg}/{id}` |
 
-Behavior:
+Returns state for a specific aggregate instance by ID.
 
-- Filters by `aggregate_id = '{id}'`
-- Returns Arrow IPC
-
-## Event Endpoints
-
-### List all events for an aggregate type
-
-| Method | Route |
-|---|---|
-| `GET` | `/api/aggregates/{agg}/events` |
-
-Query parameters:
-
-- `limit` optional, default `1000`
-- `offset` optional, default `0`
-
-Behavior:
-
-- Returns Arrow IPC rows from `DeReg."{agg}$Events"`
-
-### List events for one stream
-
-| Method | Route |
-|---|---|
-| `GET` | `/api/aggregates/{agg}/events/{stream_id}` |
-
-Behavior:
-
-- Filters by `stream_id = '{stream_id}'`
-- Returns Arrow IPC
-
-## Inspect Table Endpoints
-
-Inspect endpoints expose temporary tables produced by `INSPECT` flows.
-
-| Method | Route |
-|---|---|
-| `GET` | `/api/aggregates/{agg}/inspect/input/{tablename}` |
-| `GET` | `/api/aggregates/{agg}/inspect/output/{tablename}` |
-
-Query parameters:
-
-- `limit` optional, default `1000`
-- `offset` optional, default `0`
-
-Behavior:
-
-- Validates aggregate existence
-- Rejects table names containing `$`
-- Returns `404` if the named table is not present in the current session context
-- Returns Arrow IPC for the table contents
-
-## Common Errors
-
-| Status | Meaning |
-|---|---|
-| `400` | Invalid identifier |
-| `404` | Aggregate or inspect table not found |
-| `403` | Forbidden inspect access to schema-like tables |
-| `500` | IPC serialization or execution error |

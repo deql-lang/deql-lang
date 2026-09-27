@@ -1,73 +1,77 @@
 ---
 title: REST API Overview
-description: HTTP API structure for a DeQL runtime, including route groups, response formats, and optional route classes.
+description: HTTP API structure for a DeQL runtime including route groups, response formats, and endpoint categories.
 ---
 
-This section describes the HTTP contract exposed by a DeQL runtime. Deployment and startup mechanics are intentionally out of scope for the language documentation.
+This section describes the HTTP contract exposed by a DeQL runtime.
 
-## Response Formats
+## Organization Scoping
 
-- Most tabular endpoints return `application/vnd.apache.arrow.stream`.
-- Status-style responses return JSON.
-- Errors return JSON in the shape:
-
-```json
-{ "error": "...message..." }
-```
-
-- `GET /api/deql/export` returns `text/plain`.
+All endpoints are scoped within an organization via the `org_id` path parameter. This ensures clear segregation of data between different organizations.
 
 ## Route Groups
 
 | Group | Purpose |
 |---|---|
-| `/health`, `/info` | Liveness and runtime metadata |
-| `/api/dereg/...` | Metadata and schema introspection for registered DeQL blocks |
-| `/api/aggregates/...` | Aggregate state, event streams, inspect tables, and command execution |
-| `/api/projections/{name}/query` | Execute a registered projection query |
-| `/api/deql/export` | Export the registered schema as DeQL text |
-| `/api/deql/create` | Optional schema creation endpoint |
-| `/api/query` | Optional read-only SQL console |
+| `/api/{org_id}/deql/info` | DeQL server info and concept counts |
+| `/api/{org_id}/deql/registry/...` | Registry introspection for DeQL concepts |
+| `/api/{org_id}/deql/aggregates/...` | Aggregate state queries and event access |
+| `/api/{org_id}/deql/{aggregate}/{command}` | Command execution |
+| `/api/{org_id}/dereg/...` | Registry management, metrics, and admin operations |
 
-## Security and Validation Defaults
+## Implemented Endpoints
 
-- Aggregate, command, projection, and block names are validated as identifiers.
-- `/api/query` accepts only read-only `SELECT` or `WITH` SQL.
-- `/api/deql/create` accepts only DeQL `CREATE` statements.
-- Command execution is aggregate-scoped and checks that the command resolves to a decision for that aggregate.
-- Read-only mode blocks mutating operations.
+### Info & Inspection
 
-## Block Mapping
-
-- Aggregates: state and event access under `/api/aggregates/...`
-- Commands: executed through `/api/aggregates/{agg}/execute/{command}`
-- Events, decisions, templates, and event stores: primarily exposed through `/api/dereg/...`
-- Projections: queried through `/api/projections/{name}/query`
-- Schema definitions: created through `/api/deql/create` when available
-
-## CLI vs REST API Access
-
-The same DeQL operations are available via the interactive CLI and via the HTTP API. The table below shows the equivalent surface for common operations.
-
-| Operation | CLI (DeQL) | REST API |
+| Method | Endpoint | Description |
 |---|---|---|
-| Execute a command | `EXECUTE HireEmployee(employee_id := ...)` | `POST /api/aggregates/{agg}/execute/{command}` with JSON payload |
-| Query aggregate state | `SELECT * FROM DeReg."BankAccount$Agg"` | `GET /api/aggregates/{agg}/state` |
-| Query event stream | `SELECT * FROM DeReg."BankAccount$Events"` | `GET /api/aggregates/{agg}/events` |
-| Query a projection | `SELECT * FROM DeReg."AccountBalance"` | `GET /api/projections/{name}/query` |
-| Run arbitrary SQL | `SELECT ...` (interactive session) | `POST /api/query` with `{ "sql": "..." }` |
-| Export schema | `EXPORT DEREG;` | `GET /api/deql/export` |
-| Define new blocks | `CREATE AGGREGATE ...` etc. | `POST /api/deql/create` with DeQL text |
-| Inspect a block | `DESCRIBE DECISION DepositFunds;` | `GET /api/dereg/decisions/{name}` |
-| List all aggregates | `DESCRIBE AGGREGATES;` | `GET /api/dereg/aggregates` |
-| Validate registry | `VALIDATE DEREG;` | — (CLI only) |
-| Inspect inspect tables | `INSPECT DECISION Hire FROM ...` | `GET /api/aggregates/{agg}/inspect/{table}` |
+| GET | `/api/{org_id}/deql/info` | Get DeQL server info, concept counts, and rehydration state |
 
-The CLI is suited for interactive exploration, schema authoring, and debugging. The REST API is suited for application integration, automation, and single-environment operation.
+### Registry Routes
 
-### Hybrid Environment Inspection (CLI)
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/{org_id}/deql/registry/routes` | List REST routes exported by DeQL-managed concepts |
+| GET | `/api/{org_id}/deql/registry/{concept_type}` | List registered concepts (aggregates, commands, events, decisions, projections, templates) |
+| GET | `/api/{org_id}/deql/registry/{concept_type}/{name}` | Get detailed information about a registered concept |
+| GET | `/api/{org_id}/deql/registry/{concept_type}/{name}/schema` | Get schema for a registered concept |
 
-One area where the CLI has no REST equivalent is **hybrid environment inspection** — running side-effect-free simulations that span environment boundaries. For example:
+### Aggregate Queries
 
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/{org_id}/deql/aggregates/{agg}/agg` | Query folded aggregate state (current state from events) |
+| GET | `/api/{org_id}/deql/aggregates/{agg}/events` | Query the `deql_events` stream |
 
-Because `INSPECT` is side-effect-free and the CLI connects directly to named event stores, it can mix data sources across environments naturally. 
+### Command Execution
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/{org_id}/deql/{aggregate}/{commandname}` | Execute a DeQL command against an aggregate |
+
+### DeReg Management
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/{org_id}/dereg/definitions` | Register DeQL definitions (text/plain) |
+| GET | `/api/{org_id}/dereg/metrics` | Get DeQL metrics; `scope=all` for all orgs |
+| POST | `/api/{org_id}/dereg/admin/validate` | Validate DeQL definitions (report only) |
+
+## Security
+
+- All endpoints require a valid organization ID (`org_id`)
+- Aggregate, command, and concept names are validated as identifiers
+- Command execution requires the command to resolve to a decision for the specified aggregate
+- Direct writes to `deql_events` stream are blocked; use the command execution endpoint instead
+
+## Implementation Notes
+
+- **Event Stream**: Events are persisted to a single per-org `deql_events` stream via the `POST /api/{org_id}/deql/{aggregate}/{command}` endpoint
+- **Aggregate State**: The `GET /api/{org_id}/deql/aggregates/{agg}/agg` endpoint queries the `deql_events` stream using SQL folding to compute current state
+- **Registry**: The DeReg registry is lazily rehydrated from the audit log on first access per organization
+
+## Additional Resources
+
+- [Registry](./registry.md) - Registry introspection endpoints
+- [Command Execution](./command.md) - Command execution endpoints
+- [Aggregate Access](./aggregate.md) - Aggregate state and event endpoints

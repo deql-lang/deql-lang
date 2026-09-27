@@ -1,28 +1,22 @@
 ---
 title: Projection REST API
-description: Query projection results and inspect projection metadata.
+description: Query registered projections and inspect projection metadata.
 ---
 
-Projections have a dedicated query endpoint plus metadata endpoints under `/api/dereg`.
+Projection endpoints provide access to pre-computed query results and metadata about registered projections. All routes are scoped within an organization via the `{{org_id}}` path parameter.
 
 ## Query a Projection
 
 | Method | Route |
 |---|---|
-| `GET` | `/api/projections/{name}/query` |
+| `GET` | `/api/{{org_id}}/deql/projections/{name}/query` |
 
 Query parameters:
 
-- `limit` optional, default `1000`
-- `offset` optional, default `0`
+- `limit` optional, default 1000
+- `offset` optional, default 0
 
-Behavior:
-
-- Validates projection name as an identifier
-- Confirms the projection exists in DeReg
-- Reads `query_sql` from `DESCRIBE PROJECTION {name}`
-- Executes that SQL with appended pagination
-- Returns Arrow IPC
+Returns results of the registered projection query.
 
 ## Projection Metadata
 
@@ -33,18 +27,18 @@ Behavior:
 
 ## Creating Projections
 
-Use the optional schema API:
+Use the schema API:
 
 | Method | Route |
 |---|---|
-| `POST` | `/api/deql/create` |
+| `POST` | `/api/dereg/definitions` |
 
-with a `CREATE PROJECTION ...` statement.
+Request body contains a DeQL `CREATE PROJECTION` statement.
 
-## Errors
+## Error Responses
 
 | Status | Meaning |
 |---|---|
 | `400` | Invalid identifier |
 | `404` | Projection not found |
-| `500` | Missing `query_sql` or execution failure |
+| `500` | Query execution failure |

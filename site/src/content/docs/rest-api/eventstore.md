@@ -1,9 +1,9 @@
 ---
 title: EventStore REST API
-description: Event store metadata and registration through the schema API.
+description: EventStore metadata and registration endpoints.
 ---
 
-Event stores are surfaced through metadata endpoints and can be registered through the optional schema creation API.
+EventStore endpoints provide metadata about registered event stores and allow registration through the schema API.
 
 ## EventStore Metadata
 
@@ -12,25 +12,16 @@ Event stores are surfaced through metadata endpoints and can be registered throu
 | `GET` | `/api/dereg/eventstores` |
 | `GET` | `/api/dereg/eventstores/{name}` |
 
-These return event store definition metadata.
+These endpoints return EventStore definition metadata.
 
 ## Creating or Replacing EventStores
 
-Use the optional schema API:
-
 | Method | Route |
 |---|---|
-| `POST` | `/api/deql/create` |
+| `POST` | `/api/dereg/definitions` |
 
-Example body:
-
-```json
-{
-  "deql": "CREATE EVENTSTORE MainStore WITH (durable.type = 'parquet', durable.path = 'data/events');"
-}
-```
+Request body contains a DeQL `CREATE EVENTSTORE` statement.
 
 ## Notes
 
-- Event store behavior is implemented in runtime/event-store crates, not in the HTTP layer.
-- The HTTP API does not expose low-level append or compaction endpoints.
+- The HTTP API does not expose low-level append or compaction operations.
